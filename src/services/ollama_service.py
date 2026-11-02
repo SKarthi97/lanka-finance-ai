@@ -1,6 +1,6 @@
 import requests
 
-from config import OLLAMA_URL
+from config import OLLAMA_URL, OLLAMA_MODEL
 
 
 def get_ollama_status():
@@ -33,7 +33,17 @@ def get_installed_models():
     ]
 
 
-def ask_ollama(prompt, model):
+def is_model_available(model=OLLAMA_MODEL):
+
+    installed = get_installed_models()
+
+    return any(
+        name == model or name.split(":")[0] == model
+        for name in installed
+    )
+
+
+def ask_ollama(prompt, model=OLLAMA_MODEL):
 
     try:
 

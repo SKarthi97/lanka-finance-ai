@@ -12,6 +12,7 @@ from ui.sidebar import render_sidebar
 from ui.upload import render_upload
 from ui.dashboard import render_dashboard
 from ui.categories import render_categories
+from ui.assistant import render_assistant
 from ui.about import render_about
 
 
@@ -57,10 +58,11 @@ render_sidebar()
 # APPLICATION NAVIGATION
 # ============================================================
 
-upload_tab, dashboard_tab, categories_tab, about_tab = st.tabs([
+upload_tab, dashboard_tab, categories_tab, assistant_tab, about_tab = st.tabs([
     "📄 Upload Statements",
     "📊 Dashboard",
     "🏷️ Categories",
+    "🤖 AI Assistant",
     "ℹ️ About"
 ])
 
@@ -90,6 +92,15 @@ with dashboard_tab:
 with categories_tab:
 
     render_categories()
+
+
+# ============================================================
+# AI ASSISTANT
+# ============================================================
+
+with assistant_tab:
+
+    render_assistant()
 
 
 # ============================================================

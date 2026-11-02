@@ -1,8 +1,10 @@
 import streamlit as st
 
+from config import OLLAMA_MODEL
 from services.ollama_service import (
     get_ollama_status,
-    get_installed_models
+    get_installed_models,
+    is_model_available
 )
 
 
@@ -19,6 +21,14 @@ def render_sidebar():
             st.success("Ollama is running")
 
             models = get_installed_models()
+
+            if is_model_available():
+                st.success(f"Model ready: {OLLAMA_MODEL}")
+            else:
+                st.warning(
+                    f"Model '{OLLAMA_MODEL}' not found. "
+                    f"Run: docker compose up ollama-pull"
+                )
 
             if models:
 
