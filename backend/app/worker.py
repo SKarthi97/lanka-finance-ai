@@ -16,6 +16,7 @@ from app import job_queue as queue
 from app.config import Settings, get_settings
 from app.db import SessionLocal
 from app.models import Document, Job
+from app.services.extraction import extract_transactions
 from app.services.inspection import inspect_document
 
 log = logging.getLogger("worker")
@@ -24,6 +25,7 @@ Handler = Callable[[Session, Job, Settings], None]
 
 HANDLERS: dict[str, Handler] = {
     "inspect_document": inspect_document,
+    "extract_transactions": extract_transactions,
 }
 
 

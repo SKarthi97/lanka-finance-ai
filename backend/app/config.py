@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     # their file so they can be retried. Set true to keep every statement file.
     retain_documents: bool = False
 
+    # Optional HMAC key for account fingerprints. If empty, a random key is generated
+    # once and kept in the settings table.
+    account_fingerprint_key: str = ""
+
     # Job queue / worker.
     job_poll_s: float = 2.0
     job_timeout_s: float = 120.0

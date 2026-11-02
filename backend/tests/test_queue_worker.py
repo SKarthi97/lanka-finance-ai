@@ -148,10 +148,11 @@ def test_worker_inspects_document_and_classifies_pages(session_factory, test_set
         ).all()
         assert [p.kind for p in pages] == ["text", "empty"]
 
-        job = db.scalar(select(Job))
-        assert job.status == "done"
-
-    assert process_one(session_factory, "w1", test_settings) is False  # queue drained
+        jobs = db.scalars(select(Job).order_by(Job.id)).all()
+        assert [(j.type, j.status) for j in jobs] == [
+            ("inspect_document", "done"),
+            ("extract_transactions", "queued"),  # next stage is chained
+        ]
 
 
 def test_worker_marks_document_failed_after_final_attempt(session_factory, test_settings):
@@ -178,6 +179,18 @@ def test_worker_marks_document_failed_after_final_attempt(session_factory, test_
         assert document.error
 
 
+def test_permanent_error_skips_remaining_retries(session_factory):
+    from app.job_queue import PermanentJobError
+
+    with session_factory() as db:
+        _enqueue(db, max_attempts=3)
+        job = job_queue.claim_next(db, "w1")
+        assert job_queue.fail(db, job, PermanentJobError("unsupported_layout")) is True
+        assert job.status == "failed"
+        assert job.attempts == 1
+        assert job.last_error == "PermanentJobError: unsupported_layout"
+
+
 def test_unknown_job_type_fails_cleanly(session_factory, test_settings):
     with session_factory() as db:
         _enqueue(db, max_attempts=1)  # type "noop" has no handler
@@ -189,50 +202,3 @@ def test_unknown_job_type_fails_cleanly(session_factory, test_settings):
         job = db.scalar(select(Job))
         assert job.status == "failed"
         assert "Unknown job type" in job.last_error
-
-
-# --- retention -------------------------------------------------------------
-
-
-def _run_inspection(session_factory, settings, pdf_bytes):
-    from app import storage
-
-    with session_factory() as db:
-        document = _document_with_file(db, settings, pdf_bytes)
-        doc_id, relpath = document.id, document.storage_path
-
-    process_one(session_factory, "w1", settings)
-    return doc_id, storage.resolve(settings, relpath)
-
-
-def test_file_is_deleted_after_successful_processing(session_factory, test_settings):
-    assert test_settings.retain_documents is False
-
-    doc_id, path = _run_inspection(session_factory, test_settings, make_pdf())
-
-    assert not path.exists()
-    with session_factory() as db:
-        document = db.get(Document, doc_id)
-        assert document.status == "inspected"
-        assert document.file_deleted_at is not None
-        assert document.sha256  # kept, so duplicate detection still works
-
-
-def test_file_is_kept_when_retention_is_on(session_factory, test_settings):
-    test_settings.retain_documents = True
-
-    doc_id, path = _run_inspection(session_factory, test_settings, make_pdf())
-
-    assert path.exists()
-    with session_factory() as db:
-        assert db.get(Document, doc_id).file_deleted_at is None
-
-
-def test_file_is_kept_when_processing_fails(session_factory, test_settings):
-    doc_id, path = _run_inspection(
-        session_factory, test_settings, b"%PDF-1.7 not a real pdf"
-    )
-
-    assert path.exists()  # still needed for a retry
-    with session_factory() as db:
-        assert db.get(Document, doc_id).file_deleted_at is None

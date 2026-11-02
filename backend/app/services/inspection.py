@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app import storage
 from app.config import Settings
 from app.models import Document, DocumentPage, Job
-from app.services.retention import discard_stored_file
+from app.job_queue import enqueue
 
 MIN_TEXT_CHARS = 30
 
@@ -62,9 +62,11 @@ def inspect_document(db: Session, job: Job, settings: Settings) -> None:
     db.add_all(pages)
     document.page_count = len(pages)
     document.status = "inspected"
+    # Next stage. Committed together with the status so the two cannot diverge.
+    enqueue(
+        db,
+        "extract_transactions",
+        document_id=document.id,
+        max_attempts=settings.job_max_attempts,
+    )
     db.commit()
-
-    # "inspected" is the last pipeline stage for now. When transaction extraction is
-    # added (Phase 2), move this call to the end of that job instead, so the file
-    # survives until it has been read.
-    discard_stored_file(db, document, settings)

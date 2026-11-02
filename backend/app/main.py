@@ -2,7 +2,7 @@ import logging
 
 from fastapi import FastAPI
 
-from app.routers import auth, documents, system
+from app.routers import auth, documents, overview, system, transactions
 
 # Application loggers (uvicorn only configures its own). Messages carry codes and ids,
 # never statement contents, descriptions, amounts or passwords.
@@ -21,3 +21,5 @@ app = FastAPI(
 app.include_router(system.router)
 app.include_router(auth.router)
 app.include_router(documents.router)
+app.include_router(transactions.router)
+app.include_router(overview.router)

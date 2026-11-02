@@ -100,8 +100,79 @@ export type DocumentItem = {
   size_bytes: number;
   page_count: number | null;
   is_encrypted: boolean;
-  status: "queued" | "processing" | "inspected" | "failed" | string;
+  status: string;
   error: string | null;
   bank_code: string | null;
+  file_available: boolean;
   created_at: string;
+};
+
+export type Issue = { code: string; page: number | null; seq: number | null };
+
+export type DocumentDetail = DocumentItem & {
+  pages: { page_no: number; kind: string; char_count: number }[];
+  account_last4: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  opening_balance: string | null;
+  closing_balance: string | null;
+  adapter: string | null;
+  adapter_version: string | null;
+  extraction_confidence: number | null;
+  validation: {
+    reconciled: boolean;
+    checks: Record<string, { passed: number; failed: number }>;
+    issues: Issue[];
+  } | null;
+  transaction_count: number;
+};
+
+// Money is sent as exact decimal strings; never do arithmetic on it in the browser.
+export type TransactionItem = {
+  id: number;
+  document_id: number;
+  seq: number;
+  transaction_date: string;
+  description: string;
+  debit: string;
+  credit: string;
+  running_balance: string;
+  source_page: number;
+  validation_status: string;
+  bank_code: string | null;
+  bank_name: string | null;
+  account_last4: string | null;
+};
+
+export type TransactionList = { total: number; items: TransactionItem[] };
+
+export type Bank = { code: string; name: string };
+
+export type Totals = { income: string; expense: string; net: string; transactions: number };
+
+export type Dashboard = {
+  balances: {
+    bank_code: string | null;
+    bank_name: string | null;
+    account_last4: string | null;
+    balance: string;
+    as_of: string;
+  }[];
+  total_balance: string;
+  as_of: string | null;
+  month: Totals;
+  year: Totals;
+  needs_review: number;
+  has_data: boolean;
+};
+
+export type Tracker = {
+  year: number;
+  years: number[];
+  rows: {
+    bank_code: string | null;
+    bank_name: string | null;
+    account_last4: string | null;
+    cells: Record<string, { status: "ok" | "review"; document_id: number }>;
+  }[];
 };

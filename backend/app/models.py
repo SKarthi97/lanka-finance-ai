@@ -1,13 +1,18 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from decimal import Decimal
 
 from sqlalchemy import (
     JSON,
     Boolean,
+    Date,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -107,9 +112,23 @@ class Document(Base):
     size_bytes: Mapped[int] = mapped_column(Integer)
     page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_encrypted: Mapped[bool] = mapped_column(Boolean, default=False)
-    # queued -> processing -> inspected | failed
+    # queued -> processing -> inspected -> processing -> reconciled | needs_review | failed
+    # needs_review -> accepted (user decision)
     status: Mapped[str] = mapped_column(String(32), default="queued")
     error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True
+    )
+    period_start: Mapped[date | None] = mapped_column(Date, nullable=True)
+    period_end: Mapped[date | None] = mapped_column(Date, nullable=True)
+    opening_balance: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    closing_balance: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    adapter: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    adapter_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # Computed from the validation checks, never self-reported by a model.
+    extraction_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # {"reconciled": bool, "checks": {...}, "issues": [{"code","page","seq"}]}; codes only.
+    validation: Mapped[dict | None] = mapped_column(JsonType, nullable=True)
     # Set when the stored PDF was removed after successful processing.
     file_deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -122,6 +141,7 @@ class Document(Base):
     )
 
     bank: Mapped[Bank | None] = relationship()
+    account: Mapped["Account | None"] = relationship()
 
 
 class DocumentPage(Base):
@@ -170,3 +190,64 @@ class Job(Base):
     finished_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+class Account(Base):
+    __tablename__ = "accounts"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "bank_id", "account_fingerprint", name="uq_accounts_identity"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    bank_id: Mapped[int | None] = mapped_column(
+        ForeignKey("banks.id", ondelete="SET NULL"), nullable=True
+    )
+    # The full account number is never stored (see app/services/accounts.py).
+    account_number_last4: Mapped[str] = mapped_column(String(4))
+    account_fingerprint: Mapped[str] = mapped_column(String(64))
+    currency: Mapped[str] = mapped_column(String(3), default="LKR")
+    nickname: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+
+
+class Transaction(Base):
+    __tablename__ = "transactions"
+    __table_args__ = (
+        UniqueConstraint("document_id", "seq", name="uq_transactions_doc_seq"),
+        Index("ix_transactions_user_date", "user_id", "transaction_date"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+    account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True
+    )
+    bank_id: Mapped[int | None] = mapped_column(
+        ForeignKey("banks.id", ondelete="SET NULL"), nullable=True
+    )
+    seq: Mapped[int] = mapped_column(Integer)
+    transaction_date: Mapped[date] = mapped_column(Date)
+    original_description: Mapped[str] = mapped_column(Text)
+    debit: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal("0.00"))
+    credit: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal("0.00"))
+    running_balance: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    currency: Mapped[str] = mapped_column(String(3), default="LKR")
+    source_page: Mapped[int] = mapped_column(Integer)
+    # ok | balance_mismatch | needs_review
+    validation_status: Mapped[str] = mapped_column(String(16), default="ok")
+    extraction_method: Mapped[str] = mapped_column(String(16), default="adapter")
+    # sha256 of (account, date, debit, credit, balance, normalised description):
+    # the dedupe key from docs/00-architecture.md section 4, used in Phase 5.
+    row_hash: Mapped[str] = mapped_column(String(64), index=True)

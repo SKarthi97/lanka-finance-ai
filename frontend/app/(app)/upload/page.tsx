@@ -1,17 +1,11 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { api, ApiError, DocumentItem } from "@/lib/api";
+import { ACTIVE_STATUSES, STATUS_LABEL, STATUS_STYLE, explainError } from "@/lib/format";
 
 const BANKS = [{ code: "boc", name: "Bank of Ceylon" }];
-const ACTIVE = new Set(["queued", "processing"]);
-
-const STATUS_STYLE: Record<string, string> = {
-  queued: "bg-slate-100 text-slate-700",
-  processing: "bg-blue-100 text-blue-800",
-  inspected: "bg-green-100 text-green-800",
-  failed: "bg-red-100 text-red-800",
-};
 
 function formatSize(bytes: number) {
   return bytes >= 1024 * 1024
@@ -42,7 +36,7 @@ export default function UploadPage() {
   }, [loadDocuments]);
 
   // Poll while anything is still being processed.
-  const hasActive = documents.some((d) => ACTIVE.has(d.status));
+  const hasActive = documents.some((d) => ACTIVE_STATUSES.has(d.status));
   useEffect(() => {
     if (!hasActive) return;
     const timer = setInterval(loadDocuments, 3000);
@@ -217,7 +211,9 @@ export default function UploadPage() {
                 {documents.map((d) => (
                   <tr key={d.id} className="border-b border-slate-100 last:border-0">
                     <td className="px-3 py-2">
-                      {d.original_filename}
+                      <Link href={`/documents/${d.id}`} className="text-slate-900 underline">
+                        {d.original_filename}
+                      </Link>
                       {d.is_encrypted && (
                         <span className="ml-2 text-xs text-slate-500">(was encrypted)</span>
                       )}
@@ -228,9 +224,9 @@ export default function UploadPage() {
                     <td className="px-3 py-2">
                       <span
                         className={`rounded px-2 py-0.5 text-xs ${STATUS_STYLE[d.status] ?? STATUS_STYLE.queued}`}
-                        title={d.error ?? undefined}
+                        title={explainError(d.error) ?? undefined}
                       >
-                        {d.status}
+                        {STATUS_LABEL[d.status] ?? d.status}
                       </span>
                     </td>
                     <td className="px-3 py-2 text-right">

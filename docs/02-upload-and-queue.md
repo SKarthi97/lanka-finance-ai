@@ -1,6 +1,7 @@
 # PDF Upload and Job Queue
 
-Status: implemented (Phase 1). Follows `00-architecture.md` sections 5 and 10.
+Status: implemented (Phase 1; the extraction stage was added in Phase 2, see
+`03-extraction.md`). Follows `00-architecture.md` sections 5 and 10.
 
 ## Flow
 
@@ -13,6 +14,7 @@ Browser -> POST /api/documents (multipart: file, bank_code, password?)
   5. save file to the documents volume, insert documents row + jobs row + audit row
      in ONE database transaction -> 202
 Worker -> claims job (FOR UPDATE SKIP LOCKED) -> inspect_document -> status "inspected"
+          -> chained extract_transactions -> reconciled | needs_review | failed
 ```
 
 ## Error codes (`detail.code`)
@@ -33,16 +35,14 @@ Worker -> claims job (FOR UPDATE SKIP LOCKED) -> inspect_document -> status "ins
   logged, audited or put in a job payload. Because the worker runs later and must not
   need the password, **encrypted PDFs are stored decrypted** on the `documents` volume.
   The sha256 still refers to the original encrypted upload.
-- **Retention (`RETAIN_DOCUMENTS`, default `false`):** the stored PDF is deleted as soon
-  as processing succeeds, so plain statement files exist only between upload and
-  processing. `documents.file_deleted_at` records the deletion; the sha256 stays, so
-  duplicate detection still works. Failed documents keep their file so they can be
-  retried. Set `RETAIN_DOCUMENTS=true` while building Phase 2, because extraction needs
-  the file. Trade-offs of deleting: no re-extraction after improving an adapter, no
-  source-page viewer to verify a row against the original, and no OCR retry. Keep files
-  only for documents you may need to audit or reprocess.
-- **Phase 2 note:** the delete call currently runs at the end of `inspect_document`.
-  Move it to the end of the extraction job when that exists.
+- **Retention (`RETAIN_DOCUMENTS`, default `false`):** the stored PDF is deleted when a
+  statement **reconciles** (or is accepted after review), so plain statement files exist
+  only between upload and a clean extraction. `documents.file_deleted_at` records the
+  deletion; the sha256 stays, so duplicate detection still works. Statements that are
+  `needs_review` or `failed` keep their file, because the source-page viewer and retries
+  need it. Set `RETAIN_DOCUMENTS=true` to keep every file. Trade-offs of deleting: no
+  re-extraction after improving an adapter, no source-page viewer for reconciled
+  statements, and no OCR retry.
 - **Queue:** Postgres table `jobs`, no Redis. Claim is committed immediately; a job whose
   worker dies is recovered after `JOB_STALE_AFTER_S` (default 600 s). Failures retry with
   exponential backoff (5 s, 10 s, ...) up to `max_attempts` (default 3), then the job and
@@ -50,8 +50,8 @@ Worker -> claims job (FOR UPDATE SKIP LOCKED) -> inspect_document -> status "ins
 - **First job type, `inspect_document`:** classifies each page as `text`, `mixed`,
   `scanned` or `empty` and stores counts only (no page text). This feeds the OCR decision
   in a later phase.
-- **Bank:** the upload form offers Bank of Ceylon (`boc`). Auto-detection comes with the
-  adapter registry.
+- **Bank:** the upload form offers Bank of Ceylon (`boc`). If no bank is sent, the adapter
+  registry picks the best-scoring adapter (auto-detection).
 
 ## Operations
 
@@ -62,7 +62,7 @@ docker compose exec postgres psql -U lanka -d lanka -c "select id,type,status,at
 
 ## Known limits
 
-- Page inspection only; no transaction extraction yet (Phase 2, BOC adapter).
-- No delete/re-process endpoint for documents.
+- Extraction supports BOC only (HNB and other banks come one at a time).
+- Documents can be deleted but not re-processed in place: delete and upload again.
 - Next.js may cap request bodies on its `/api` proxy; if large uploads fail at the
   frontend while working directly against the backend, raise the proxy body limit.

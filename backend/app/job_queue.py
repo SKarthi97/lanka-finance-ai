@@ -15,6 +15,13 @@ from app.models import Job, utcnow
 RETRY_BASE_S = 5
 
 
+class PermanentJobError(Exception):
+    """A failure that retrying cannot fix (bad layout, missing file).
+
+    The message must be a short code, never statement content.
+    """
+
+
 def enqueue(
     db: Session,
     job_type: str,
@@ -87,13 +94,16 @@ def complete(db: Session, job: Job) -> None:
 
 
 def fail(db: Session, job: Job, error: Exception) -> bool:
-    """Record a failure. Returns True when the job is permanently failed."""
+    """Record a failure. Returns True when the job is permanently failed.
+
+    PermanentJobError skips the remaining retries.
+    """
     now = utcnow()
     job.last_error = f"{type(error).__name__}: {error}"[:500]
     job.locked_at = None
     job.locked_by = None
 
-    permanent = job.attempts >= job.max_attempts
+    permanent = isinstance(error, PermanentJobError) or job.attempts >= job.max_attempts
     if permanent:
         job.status = "failed"
         job.finished_at = now

@@ -1,11 +1,12 @@
 import hashlib
 import logging
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 
 import pymupdf
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from pydantic import BaseModel
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -14,7 +15,8 @@ from app.config import Settings, get_settings
 from app.db import get_db
 from app.deps import get_current_session
 from app.job_queue import enqueue
-from app.models import AuditLog, Bank, Document, DocumentPage, Job, UserSession
+from app.models import AuditLog, Bank, Document, DocumentPage, Job, Transaction, UserSession
+from app.services.retention import discard_stored_file
 
 log = logging.getLogger("documents")
 
@@ -43,6 +45,16 @@ class PageOut(BaseModel):
 
 class DocumentDetail(DocumentOut):
     pages: list[PageOut]
+    account_last4: str | None
+    period_start: date | None
+    period_end: date | None
+    opening_balance: Decimal | None
+    closing_balance: Decimal | None
+    adapter: str | None
+    adapter_version: str | None
+    extraction_confidence: float | None
+    validation: dict | None
+    transaction_count: int
 
 
 def _error(status: int, code: str, message: str, **extra) -> HTTPException:
@@ -226,12 +238,28 @@ def get_document(
         .order_by(DocumentPage.page_no)
     ).all()
 
+    transaction_count = db.scalar(
+        select(func.count()).select_from(Transaction).where(
+            Transaction.document_id == document.id
+        )
+    )
+
     return DocumentDetail(
         **_to_out(document).model_dump(),
         pages=[
             PageOut(page_no=p.page_no, kind=p.kind, char_count=p.char_count)
             for p in pages
         ],
+        account_last4=document.account.account_number_last4 if document.account else None,
+        period_start=document.period_start,
+        period_end=document.period_end,
+        opening_balance=document.opening_balance,
+        closing_balance=document.closing_balance,
+        adapter=document.adapter,
+        adapter_version=document.adapter_version,
+        extraction_confidence=document.extraction_confidence,
+        validation=document.validation,
+        transaction_count=transaction_count or 0,
     )
 
 
@@ -262,7 +290,73 @@ def delete_document(
     # Explicit, so behaviour does not depend on database-level cascades.
     db.execute(delete(Job).where(Job.document_id == document.id))
     db.execute(delete(DocumentPage).where(DocumentPage.document_id == document.id))
+    db.execute(delete(Transaction).where(Transaction.document_id == document.id))
     db.delete(document)
     db.commit()
 
     storage.remove_document(settings, relpath)
+
+
+@router.post("/{document_id}/accept", response_model=DocumentOut)
+def accept_document(
+    document_id: int,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> DocumentOut:
+    """The user reviewed a statement that failed reconciliation and accepts it.
+
+    Accepted statements count in analytics (docs/00-architecture.md section 8.6).
+    """
+    document = db.get(Document, document_id)
+    if document is None or document.user_id != session.user_id:
+        raise _error(404, "not_found", "Document not found.")
+    if document.status != "needs_review":
+        raise _error(409, "not_reviewable", "Only statements needing review can be accepted.")
+
+    document.status = "accepted"
+    db.add(
+        AuditLog(
+            user_id=session.user_id,
+            action="document.accept",
+            entity="document",
+            entity_id=str(document.id),
+            detail={"issues": len((document.validation or {}).get("issues", []))},
+        )
+    )
+    db.commit()
+    discard_stored_file(db, document, settings)
+    return _to_out(document)
+
+
+@router.get("/{document_id}/pages/{page_no}/image")
+def page_image(
+    document_id: int,
+    page_no: int,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    """Render one page of the stored original, for checking a row against its source.
+
+    Only available while the file is retained (statements needing review always are).
+    """
+    document = db.get(Document, document_id)
+    if document is None or document.user_id != session.user_id:
+        raise _error(404, "not_found", "Document not found.")
+
+    path = storage.resolve(settings, document.storage_path)
+    if document.file_deleted_at is not None or not path.exists():
+        raise _error(404, "file_not_retained", "The original file is no longer stored.")
+
+    pdf = pymupdf.open(path)
+    try:
+        if not 1 <= page_no <= pdf.page_count:
+            raise _error(404, "page_not_found", "Page not found.")
+        png = pdf[page_no - 1].get_pixmap(dpi=110).tobytes("png")
+    finally:
+        pdf.close()
+
+    return Response(
+        png, media_type="image/png", headers={"Cache-Control": "private, no-store"}
+    )

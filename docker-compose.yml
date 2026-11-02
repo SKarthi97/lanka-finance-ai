@@ -60,6 +60,7 @@ services:
       DOCUMENTS_DIR: /data/documents
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-25}
       MAX_PAGES: ${MAX_PAGES:-300}
+      RETAIN_DOCUMENTS: ${RETAIN_DOCUMENTS:-false}
     depends_on:
       postgres:
         condition: service_healthy
