@@ -25,6 +25,21 @@ class Settings(BaseSettings):
 
     min_password_length: int = 12
 
+    # Uploaded statements live on a Docker named volume shared with the worker.
+    documents_dir: str = "/data/documents"
+    max_upload_mb: int = 25
+    max_pages: int = 300
+    # False: the stored PDF is deleted once processing succeeds (the sha256 stays in
+    # the database, so duplicate detection still works). Failed documents always keep
+    # their file so they can be retried. Set true to keep every statement file.
+    retain_documents: bool = False
+
+    # Job queue / worker.
+    job_poll_s: float = 2.0
+    job_timeout_s: float = 120.0
+    job_max_attempts: int = 3
+    job_stale_after_s: int = 600
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -57,9 +57,14 @@ services:
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:1.5b}
       OLLAMA_TIMEOUT_S: ${OLLAMA_TIMEOUT_S:-60}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      DOCUMENTS_DIR: /data/documents
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-25}
+      MAX_PAGES: ${MAX_PAGES:-300}
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - documents:/data/documents
     networks: [internal]
     mem_limit: 1g
     read_only: true
@@ -72,6 +77,32 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+
+  # Background worker: same image as the backend, no published ports.
+  # Starts after the backend is healthy so database migrations have been applied.
+  worker:
+    build: ./backend
+    command: ["python", "-m", "app.worker"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://lanka:${POSTGRES_PASSWORD}@postgres:5432/lanka
+      DOCUMENTS_DIR: /data/documents
+      MAX_PAGES: ${MAX_PAGES:-300}
+      RETAIN_DOCUMENTS: ${RETAIN_DOCUMENTS:-false}
+      JOB_TIMEOUT_S: ${JOB_TIMEOUT_S:-120}
+      JOB_POLL_S: ${JOB_POLL_S:-2}
+    depends_on:
+      backend:
+        condition: service_healthy
+    volumes:
+      - documents:/data/documents
+    networks: [internal]
+    mem_limit: 2g
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    stop_grace_period: 30s
+    restart: unless-stopped
 
   frontend:
     build:
@@ -98,3 +129,4 @@ networks:
 volumes:
   pgdata:
   ollama_models:
+  documents:

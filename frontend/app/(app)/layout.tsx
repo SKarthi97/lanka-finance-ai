@@ -52,6 +52,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <nav className="flex gap-5 text-sm">
           <span className="font-semibold">Lanka Finance AI</span>
           {link("/", "Dashboard")}
+          {link("/upload", "Upload")}
           {link("/system", "System")}
         </nav>
         <div className="flex items-center gap-3 text-sm text-slate-600">

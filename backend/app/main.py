@@ -1,6 +1,14 @@
+import logging
+
 from fastapi import FastAPI
 
-from app.routers import auth, system
+from app.routers import auth, documents, system
+
+# Application loggers (uvicorn only configures its own). Messages carry codes and ids,
+# never statement contents, descriptions, amounts or passwords.
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+)
 
 # Interactive docs are disabled: the API is only reachable through the frontend proxy.
 app = FastAPI(
@@ -12,3 +20,4 @@ app = FastAPI(
 
 app.include_router(system.router)
 app.include_router(auth.router)
+app.include_router(documents.router)

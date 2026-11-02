@@ -1,5 +1,6 @@
 fastapi>=0.115,<1
 uvicorn[standard]>=0.30,<1
+python-multipart>=0.0.9,<1
 sqlalchemy>=2.0,<3
 alembic>=1.13,<2
 psycopg[binary]>=3.2,<4
@@ -8,3 +9,6 @@ pydantic-settings>=2.3,<3
 argon2-cffi>=23.1,<26
 httpx>=0.27,<1
 psutil>=5.9,<8
+# Stay on 1.x: 2.0 pulls in onnxruntime (which logs telemetry setup), pymupdf-layout
+# and pymupdf4llm. None are needed here and the app must stay telemetry-free.
+pymupdf>=1.26,<2

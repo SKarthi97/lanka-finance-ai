@@ -13,7 +13,10 @@ COPY alembic.ini .
 COPY alembic ./alembic
 COPY app ./app
 
-RUN useradd --system --uid 10001 --no-create-home appuser
+# /data/documents is the mount point of the shared "documents" volume.
+RUN useradd --system --uid 10001 --no-create-home appuser \
+    && mkdir -p /data/documents \
+    && chown -R appuser /data
 USER appuser
 
 EXPOSE 8000
