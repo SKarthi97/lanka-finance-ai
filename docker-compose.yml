@@ -1,0 +1,100 @@
+# Base stack per docs/00-architecture.md section 3.
+# Only the frontend publishes a port (bound to 127.0.0.1 by default).
+# Copy .env.example to .env and set POSTGRES_PASSWORD before starting.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: lanka
+      POSTGRES_DB: lanka
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [internal]
+    mem_limit: 1g
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lanka -d lanka"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_models:/root/.ollama
+    networks: [internal]
+    mem_limit: 5g
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # One-shot job: asks the ollama server to download the configured model, then exits.
+  # Run on demand: docker compose --profile setup run --rm ollama-pull
+  ollama-pull:
+    image: ollama/ollama:latest
+    profiles: ["setup"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["ollama", "pull", "${OLLAMA_MODEL:-qwen2.5:1.5b}"]
+    networks: [internal]
+    restart: "no"
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://lanka:${POSTGRES_PASSWORD}@postgres:5432/lanka
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:1.5b}
+      OLLAMA_TIMEOUT_S: ${OLLAMA_TIMEOUT_S:-60}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [internal]
+    mem_limit: 1g
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        BACKEND_URL: http://backend:8000
+    ports:
+      - "${FRONTEND_BIND:-127.0.0.1}:${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [edge, internal]
+    mem_limit: 512m
+    read_only: true
+    tmpfs: ["/tmp", "/app/.next/cache"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+networks:
+  edge: {}
+  internal: {}
+
+volumes:
+  pgdata:
+  ollama_models:

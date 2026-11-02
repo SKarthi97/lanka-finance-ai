@@ -1,0 +1,8 @@
+# Development override: exposes Ollama on localhost so the legacy Streamlit
+# prototype in src/ (which expects http://localhost:11434) can use it.
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+services:
+  ollama:
+    ports:
+      - "127.0.0.1:11434:11434"
