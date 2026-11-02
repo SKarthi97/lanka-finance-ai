@@ -360,3 +360,47 @@ def page_image(
     return Response(
         png, media_type="image/png", headers={"Cache-Control": "private, no-store"}
     )
+
+
+@router.post("/{document_id}/reprocess", response_model=DocumentOut, status_code=202)
+def reprocess_document(
+    document_id: int,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> DocumentOut:
+    """Run extraction again on the stored original, e.g. after a parser improvement.
+
+    Needs the original file (kept for statements that need review or failed, or when
+    RETAIN_DOCUMENTS=true). The previous transactions are replaced, not duplicated.
+    """
+    document = db.get(Document, document_id)
+    if document is None or document.user_id != session.user_id:
+        raise _error(404, "not_found", "Document not found.")
+    if document.status in ("queued", "processing", "inspected"):
+        raise _error(409, "busy", "This document is already being processed.")
+    if document.status == "accepted":
+        raise _error(409, "already_accepted", "Accepted statements cannot be re-run.")
+
+    path = storage.resolve(settings, document.storage_path)
+    if document.file_deleted_at is not None or not path.exists():
+        raise _error(409, "file_not_retained", "The original file is no longer stored.")
+
+    document.status = "queued"
+    document.error = None
+    enqueue(
+        db,
+        "extract_transactions",
+        document_id=document.id,
+        max_attempts=settings.job_max_attempts,
+    )
+    db.add(
+        AuditLog(
+            user_id=session.user_id,
+            action="document.reprocess",
+            entity="document",
+            entity_id=str(document.id),
+        )
+    )
+    db.commit()
+    return _to_out(document)

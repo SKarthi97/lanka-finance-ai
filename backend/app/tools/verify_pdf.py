@@ -74,6 +74,32 @@ def layout_shape(pages: list[str], max_lines: int = 150) -> list[str]:
     return out
 
 
+def marker_blocks(pages: list[str], before: int = 3, after: int = 6, per_marker: int = 3) -> list[str]:
+    """Masked lines around each BALANCE B/F and BALANCE C/F marker.
+
+    Small and focused: shows how the opening/closing balance rows are laid out without
+    printing the whole statement.
+    """
+    out: list[str] = []
+    for marker in ("BALANCE B/F", "BALANCE C/F"):
+        found = 0
+        total = sum(
+            1 for text in pages for raw in text.splitlines() if marker in raw.upper()
+        )
+        out.append(f"== {marker}: {total} occurrence(s); first {min(total, per_marker)} shown ==")
+        for number, text in enumerate(pages, start=1):
+            lines = [raw.strip() for raw in text.splitlines() if raw.strip()]
+            for index, line in enumerate(lines):
+                if marker not in line.upper() or found >= per_marker:
+                    continue
+                found += 1
+                out.append(f"--- page {number}, line {index + 1} ---")
+                for offset in range(max(0, index - before), min(len(lines), index + after + 1)):
+                    arrow = ">>" if offset == index else "  "
+                    out.append(f"{arrow} {mask_line(lines[offset])}")
+    return out
+
+
 def load_pages(path: str, password: str | None) -> list[str]:
     pdf = pymupdf.open(path)
     try:
@@ -91,7 +117,9 @@ def yes_no(value: bool) -> str:
     return "yes" if value else "no"
 
 
-def report(pages: list[str], bank_code: str | None, shape: bool, out=print) -> None:
+def report(
+    pages: list[str], bank_code: str | None, shape: bool, out=print, blocks: bool = False
+) -> None:
     out("== Redacted statement check ==")
     out("(no amounts, dates, descriptions or account numbers are printed)")
     out(f"pages: {len(pages)}")
@@ -129,6 +157,12 @@ def report(pages: list[str], bank_code: str | None, shape: bool, out=print) -> N
             histogram = Counter(issue.code for issue in result.issues)
             out(f"issue codes: {dict(histogram) or 'none'}")
 
+    if blocks:
+        out("")
+        out("== Balance-row layout (masked) ==")
+        for line in marker_blocks(pages):
+            out(line)
+
     if shape:
         out("")
         out("== Layout shape (digits -> 9, letters -> A/a, structural words kept) ==")
@@ -141,11 +175,16 @@ def main(argv: list[str] | None = None, out=print) -> int:
     parser.add_argument("pdf", help="path to the statement PDF")
     parser.add_argument("--bank", default=None, help="force an adapter, e.g. boc")
     parser.add_argument("--shape", action="store_true", help="also print the masked layout")
+    parser.add_argument(
+        "--blocks",
+        action="store_true",
+        help="print only the masked lines around BALANCE B/F and C/F (short)",
+    )
     parser.add_argument("--password", default=None, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
     pages = load_pages(args.pdf, args.password)
-    report(pages, args.bank, args.shape, out)
+    report(pages, args.bank, args.shape, out, blocks=args.blocks)
     return 0
 
 

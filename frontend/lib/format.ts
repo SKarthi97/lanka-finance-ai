@@ -61,6 +61,10 @@ export const ISSUE_LABEL: Record<string, string> = {
   opening_balance_unidentified: "The opening balance line could not be read.",
   opening_balance_unavailable: "A row could not be checked because there is no opening balance.",
   unexpected_amount_columns: "A row did not have the expected amount columns and was skipped.",
+  carry_forward_mismatch:
+    "A page's carried-forward balance does not match the last row of the previous page (a row may be missing).",
+  opening_balance_ambiguous:
+    "The opening balance line had several amounts; the last (balance column) was used.",
   negative_amount: "A row had a negative amount and was skipped.",
   invalid_date: "A row had an invalid date and was skipped.",
   balance_mismatch: "A row's amount differs from the change in running balance.",

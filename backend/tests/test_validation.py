@@ -50,7 +50,14 @@ def test_missing_closing_balance_blocks_reconciliation():
 
 
 def test_date_outside_statement_period_is_flagged():
-    result = check(rows=[("01/07", "WAY TOO EARLY", "100.00", "900.00")])
+    """Years are inferred, so the adapter itself cannot emit an out-of-range date; the
+    validator still guards against one (e.g. from a future adapter)."""
+    from datetime import date
+
+    statement = adapter.parse(to_pages(boc_lines()))
+    statement.transactions[0].date = date(2021, 7, 1)  # well before the period start
+
+    result = validate(statement)
     assert result.reconciled is False
     assert "date_outside_period" in codes(result)
     assert result.row_status[1] == "needs_review"

@@ -164,6 +164,7 @@ export type Dashboard = {
   year: Totals;
   needs_review: number;
   has_data: boolean;
+  years: number[];
 };
 
 export type Tracker = {

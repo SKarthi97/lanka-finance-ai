@@ -211,3 +211,141 @@ def test_tracker_is_empty_without_statements(logged_in):
     body = client.get("/api/tracker?year=2026").json()
     assert body["rows"] == []
     assert body["years"] == [2026]
+
+
+# --- re-running extraction ------------------------------------------------------------
+
+
+def test_reprocess_replaces_transactions_without_duplicating(
+    logged_in, session_factory, test_settings
+):
+    from app.models import Transaction
+    from app.worker import process_one
+    from sqlalchemy import select
+
+    client, csrf = logged_in
+    doc_id = run_pipeline(client, csrf, session_factory, test_settings, boc_pdf(closing="999.00"))
+    headers = {"X-CSRF-Token": csrf}  # needs_review keeps its file
+
+    assert client.post(f"/api/documents/{doc_id}/reprocess").status_code == 403  # CSRF
+    response = client.post(f"/api/documents/{doc_id}/reprocess", headers=headers)
+    assert response.status_code == 202
+    assert response.json()["status"] == "queued"
+
+    # while queued it cannot be queued again
+    assert client.post(f"/api/documents/{doc_id}/reprocess", headers=headers).status_code == 409
+
+    assert process_one(session_factory, "w1", test_settings) is True
+    with session_factory() as db:
+        assert len(db.scalars(select(Transaction)).all()) == 1  # replaced, not doubled
+    assert client.get(f"/api/documents/{doc_id}").json()["status"] == "needs_review"
+
+
+def test_reprocess_needs_the_original_file(logged_in, session_factory, test_settings):
+    client, csrf = logged_in
+    doc_id = run_pipeline(client, csrf, session_factory, test_settings, september())  # reconciled -> file deleted
+
+    response = client.post(f"/api/documents/{doc_id}/reprocess", headers={"X-CSRF-Token": csrf})
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "file_not_retained"
+
+
+def test_accepted_statements_cannot_be_reprocessed(logged_in, session_factory, test_settings):
+    test_settings.retain_documents = True
+    client, csrf = logged_in
+    headers = {"X-CSRF-Token": csrf}
+    doc_id = run_pipeline(client, csrf, session_factory, test_settings, boc_pdf(closing="999.00"))
+    client.post(f"/api/documents/{doc_id}/accept", headers=headers)
+
+    response = client.post(f"/api/documents/{doc_id}/reprocess", headers=headers)
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "already_accepted"
+
+
+# --- statements that span several years ----------------------------------------------
+
+
+def multi_year_statement(**kwargs):
+    """Dec 2020 to Jun 2022: dates carry no year, so the adapter walks back from the end.
+    1,000 less 10 per row, 7 rows -> 930."""
+    rows = [
+        ("31/12", "ROW 1", "10.00", "990.00"),  # 2020
+        ("06/01", "ROW 2", "10.00", "980.00"),  # 2021
+        ("15/06", "ROW 3", "10.00", "970.00"),  # 2021
+        ("20/12", "ROW 4", "10.00", "960.00"),  # 2021
+        ("10/03", "ROW 5", "10.00", "950.00"),  # 2022
+        ("30/06", "ROW 6", "10.00", "940.00"),  # 2022
+    ]
+    return boc_pdf(
+        statement_date="30/06/2022",
+        opening=("28/12", "1,000.00"),
+        rows=rows,
+        closing="940.00",
+        **kwargs,
+    )
+
+
+def test_year_selectors_include_every_year_with_transactions(
+    logged_in, session_factory, test_settings
+):
+    client, csrf = logged_in
+    run_pipeline(client, csrf, session_factory, test_settings, multi_year_statement())
+
+    dashboard = client.get("/api/dashboard?year=2026&month=11").json()
+    assert dashboard["years"] == [2020, 2021, 2022, 2026]  # old years + the requested one
+
+    tracker = client.get("/api/tracker?year=2026").json()
+    assert tracker["years"] == [2020, 2021, 2022, 2026]
+
+
+def test_old_years_can_be_chosen_on_the_dashboard(logged_in, session_factory, test_settings):
+    client, csrf = logged_in
+    run_pipeline(client, csrf, session_factory, test_settings, multi_year_statement())
+
+    dec_2021 = client.get("/api/dashboard?year=2021&month=12").json()
+    assert dec_2021["month"]["transactions"] == 1  # ROW 4, 20/12/2021
+    assert Decimal(dec_2021["month"]["expense"]) == Decimal("10.00")
+    assert dec_2021["year"]["transactions"] == 3  # rows 2, 3 and 4
+
+    assert client.get("/api/transactions?year=2020").json()["total"] == 1
+    assert client.get("/api/transactions?year=2021").json()["total"] == 3
+
+
+def test_tracker_ticks_every_month_a_long_statement_covers(
+    logged_in, session_factory, test_settings
+):
+    client, csrf = logged_in
+    doc_id = run_pipeline(client, csrf, session_factory, test_settings, multi_year_statement())
+
+    def months(year):
+        (row,) = client.get(f"/api/tracker?year={year}").json()["rows"]
+        assert {c["document_id"] for c in row["cells"].values()} <= {doc_id}
+        return sorted(int(m) for m in row["cells"])
+
+    assert months(2021) == list(range(1, 13))  # every month of a year fully inside
+    assert months(2022) == [1, 2, 3, 4, 5, 6]  # up to the month the statement ends
+    assert months(2020) == []  # the opening month (28 Dec) is only partly covered
+
+
+# --- which months a statement counts for ----------------------------------------------
+
+
+def test_covered_months_rule():
+    from datetime import date
+
+    from app.routers.overview import _covered_months
+
+    # A monthly statement counts for its end month only, so a missing month stays visible.
+    assert _covered_months(date(2022, 10, 31), date(2022, 11, 30)) == {(2022, 11)}
+    assert _covered_months(date(2022, 8, 30), date(2022, 9, 30)) == {(2022, 9)}
+    # No opening date: just the end month.
+    assert _covered_months(None, date(2022, 11, 30)) == {(2022, 11)}
+    # A statement ending mid-month still counts for that month.
+    assert _covered_months(date(2022, 10, 31), date(2022, 11, 15)) == {(2022, 11)}
+    # A long statement fills every month wholly inside it, plus the end month.
+    months = _covered_months(date(2021, 12, 31), date(2022, 6, 30))
+    assert months == {(2022, m) for m in range(1, 7)}
+    # Across a year boundary.
+    assert _covered_months(date(2020, 12, 28), date(2022, 6, 30)) == (
+        {(2021, m) for m in range(1, 13)} | {(2022, m) for m in range(1, 7)}
+    )

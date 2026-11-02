@@ -57,6 +57,19 @@ export default function UploadPage() {
     }
   }
 
+  async function rerun(doc: DocumentItem) {
+    try {
+      await api(`/documents/${doc.id}/reprocess`, { method: "POST" });
+      setMessage({ kind: "info", text: `Re-running extraction for ${doc.original_filename}.` });
+      await loadDocuments();
+    } catch (err) {
+      setMessage({
+        kind: "error",
+        text: err instanceof ApiError ? err.message : "Could not re-run extraction.",
+      });
+    }
+  }
+
   function reset() {
     setFile(null);
     setPassword("");
@@ -229,7 +242,16 @@ export default function UploadPage() {
                         {STATUS_LABEL[d.status] ?? d.status}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-right">
+                    <td className="space-x-3 whitespace-nowrap px-3 py-2 text-right">
+                      {d.file_available && ["needs_review", "failed", "reconciled"].includes(d.status) && (
+                        <button
+                          onClick={() => rerun(d)}
+                          title="Run extraction again on the stored original"
+                          className="text-xs text-slate-700 hover:underline"
+                        >
+                          Re-run
+                        </button>
+                      )}
                       <button
                         onClick={() => remove(d)}
                         disabled={d.status === "processing"}

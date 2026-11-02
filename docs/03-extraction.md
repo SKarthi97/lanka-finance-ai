@@ -34,6 +34,28 @@ repeated column headers and page footers ignored, and issue codes instead of fre
 
 Debit vs credit is decided from the running-balance movement, then validated.
 
+Dates carry no year (`DD/MM`), so statements spanning many years are resolved **from the
+end**: the last row is in the statement-date year, and going backwards the year drops by
+one whenever the date jumps forward in the calendar (a December row before a January
+row). This assumes rows are chronological; reconciliation still checks the balances.
+
+A row reads: date, description (possibly wrapped), then amounts. Description text is taken
+only from **before the first amount**. Text after the amounts is page furniture that landed
+in the same block (page footer, the next page's account/branch header, "END OF STATEMENT"
+notes) and is discarded, with no list of phrases to maintain. If a row has text only after
+its amounts, that text is used as a fallback.
+
+BOC prints zero as `.00` (no leading digit), so `.00` is a valid amount; a nil opening
+balance (an account's first statement) is read as `0.00`.
+
+Multi-page statements: only the **first** `BALANCE B/F` is the opening balance and the
+**last** `BALANCE C/F` is the closing balance. A `B/F` on a later page is a page
+carry-forward; it must equal the previous row's balance (`carry_forward_mismatch`
+otherwise, which blocks reconciliation because a row may be missing). Lines that repeat
+page 1's header (names, addresses, titles) on later pages are dropped so they cannot
+leak into the previous row's description, and a row whose amounts fall on the next page
+stays one row.
+
 ## Validation (deterministic, `services/validation.py`)
 
 | Check | Rule |
@@ -80,10 +102,14 @@ the output before sharing it.
   transaction date falls in the chosen month and year (default: the browser's current
   month, so the server's timezone never decides). Until categories exist (Phase 4) these
   include transfers and loan payments. Statements needing review are excluded.
-- **Tracker:** one row per bank/account, one column per month. A statement belongs to the
-  month its period **ends** in (31 Oct - 30 Nov is the November statement). A tick means
-  reconciled or accepted, `!` needs review, a dot means no statement. A month cell links
-  to the statement.
+- **Tracker:** one row per bank/account, one column per month. A statement counts for the
+  month its period **ends** in and for every month **wholly inside** its period. So a
+  31 Oct - 30 Nov statement is the November statement only (a missing October stays
+  visible), while a multi-year statement fills every month it spans. The month containing
+  the period's opening date is not ticked unless fully covered. A tick means reconciled or
+  accepted, `!` needs review, a dot means no statement. A month cell links to the statement.
+- **Year selectors** (dashboard, tracker, transactions filter) list every year that has
+  transactions, not just statement end years, so old years of a long statement can be chosen.
 - Statements without a detectable account number are grouped per bank, so two real
   accounts at one bank would share a row until the account number is found.
 
@@ -104,6 +130,7 @@ overlap detection in Phase 5).
 | `GET /api/dashboard?year=&month=` | current balances, income/expense for the month and the year, `needs_review` count |
 | `GET /api/tracker?year=` | bank/account x month grid of uploaded statements |
 | `POST /api/documents/{id}/accept` | accept a `needs_review` statement |
+| `POST /api/documents/{id}/reprocess` | run extraction again on the stored original (needs the file; replaces the old rows) |
 | `GET /api/documents/{id}/pages/{n}/image` | page PNG of the original; 404 `file_not_retained` once deleted |
 
 ## Differences from the architecture doc

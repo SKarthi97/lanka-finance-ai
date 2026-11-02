@@ -97,6 +97,19 @@ export default function DocumentPage() {
     }
   }
 
+  async function reprocess() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api<DocumentItem>(`/documents/${id}/reprocess`, { method: "POST" });
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not re-run extraction.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (error && !doc) {
     return (
       <section className="space-y-3">
@@ -126,6 +139,16 @@ export default function DocumentPage() {
           >
             {STATUS_LABEL[doc.status] ?? doc.status}
           </span>
+          {doc.file_available && ["needs_review", "failed", "reconciled"].includes(doc.status) && (
+            <button
+              onClick={reprocess}
+              disabled={busy}
+              title="Run extraction again on the stored original"
+              className="rounded border border-slate-300 px-2 py-0.5 text-xs disabled:opacity-50"
+            >
+              Re-run extraction
+            </button>
+          )}
         </div>
       </div>
 

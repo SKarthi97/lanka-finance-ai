@@ -19,6 +19,7 @@ BLOCKING_PARSE_ISSUES = {
     "negative_amount",
     "invalid_date",
     "opening_balance_unidentified",
+    "carry_forward_mismatch",
 }
 
 

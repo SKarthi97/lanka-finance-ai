@@ -1,9 +1,9 @@
-from datetime import date, datetime
+from datetime import date, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import extract, func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -19,6 +19,43 @@ CENTS = Decimal("0.01")
 def _dec(value) -> Decimal:
     """SQLite sums come back as floats in tests; Postgres returns exact Decimals."""
     return Decimal(str(value)).quantize(CENTS)
+
+
+def _covered_months(period_start: date | None, period_end: date) -> set[tuple[int, int]]:
+    """(year, month) pairs a statement counts for.
+
+    The month its period ends in, plus every month that lies wholly inside the period.
+    A monthly statement 31 Oct - 30 Nov therefore counts for November only, so a missing
+    October statement stays visible; a multi-year statement counts for every month it spans.
+    """
+    covered = {(period_end.year, period_end.month)}
+    if period_start is None:
+        return covered
+
+    year, month = period_start.year, period_start.month
+    for _ in range(1200):  # 100 years of months; guards against bad data
+        first = date(year, month, 1)
+        next_first = date(year + (month == 12), month % 12 + 1, 1)
+        if next_first - timedelta(days=1) > period_end:
+            break
+        if first > period_start:
+            covered.add((year, month))
+        year, month = next_first.year, next_first.month
+    return covered
+
+
+def _transaction_years(db: Session, user_id: int, statuses: tuple[str, ...]) -> set[int]:
+    """Years in which the user has transactions from statements with these statuses."""
+    year_of = extract("year", Transaction.transaction_date)
+    return {
+        int(y)
+        for (y,) in db.execute(
+            select(year_of)
+            .join(Document, Document.id == Transaction.document_id)
+            .where(Document.user_id == user_id, Document.status.in_(statuses))
+            .distinct()
+        )
+    }
 
 
 # --- banks ---------------------------------------------------------------------
@@ -65,6 +102,7 @@ class DashboardOut(BaseModel):
     year: Totals
     needs_review: int
     has_data: bool
+    years: list[int]  # every year with transactions, for the period selector
 
 
 def _totals(db: Session, included, start: date, end: date) -> Totals:
@@ -150,6 +188,7 @@ def dashboard(
         year=_totals(db, included, date(year, 1, 1), date(year + 1, 1, 1)),
         needs_review=needs_review or 0,
         has_data=bool(statements),
+        years=sorted(_transaction_years(db, session.user_id, ACTIVE_STATUSES) | {year}),
     )
 
 
@@ -182,9 +221,11 @@ def tracker(
 ) -> TrackerOut:
     """Which months have a statement, per bank and account.
 
-    A statement belongs to the month its period ends in (a 31 Oct - 30 Nov statement is
-    the November statement). A cell is `ok` for reconciled/accepted and `review` for a
-    statement still needing review. Missing months have no cell.
+    A statement counts for the month its period ends in and for every month wholly inside
+    its period (see `_covered_months`), so a 31 Oct - 30 Nov statement is the November
+    statement while a multi-year statement fills every month it spans. A cell is `ok` for
+    reconciled/accepted and `review` for a statement still needing review. Missing months
+    have no cell.
     """
     year = year or date.today().year
 
@@ -198,7 +239,12 @@ def tracker(
         .order_by(Document.period_end, Document.id)
     ).all()
 
-    years = sorted({d.period_end.year for d in docs} | {year})
+    covered = {d.id: _covered_months(d.period_start, d.period_end) for d in docs}
+    years = sorted(
+        {y for months in covered.values() for y, _ in months}
+        | _transaction_years(db, session.user_id, ACTIVE_STATUSES + ("needs_review",))
+        | {year}
+    )
     rows: dict[tuple, TrackerRow] = {}
 
     for doc in docs:
@@ -212,13 +258,14 @@ def tracker(
                 cells={},
             ),
         )
-        if doc.period_end.year != year:
-            continue
         status = "ok" if doc.status in ACTIVE_STATUSES else "review"
-        existing = row.cells.get(doc.period_end.month)
-        # A clean statement beats one needing review; otherwise the latest wins.
-        if existing is None or existing.status == "review" or status == "ok":
-            row.cells[doc.period_end.month] = TrackerCell(status=status, document_id=doc.id)
+        for cell_year, cell_month in covered[doc.id]:
+            if cell_year != year:
+                continue
+            existing = row.cells.get(cell_month)
+            # A clean statement beats one needing review; otherwise the latest wins.
+            if existing is None or existing.status == "review" or status == "ok":
+                row.cells[cell_month] = TrackerCell(status=status, document_id=doc.id)
 
     ordered = sorted(rows.values(), key=lambda r: (r.bank_name or "", r.account_last4 or ""))
     return TrackerOut(year=year, years=years, rows=ordered)

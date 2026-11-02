@@ -82,7 +82,11 @@ export default function DashboardPage() {
     setTrackerYear(y);
   }
 
-  const years = Array.from(new Set([...(tracker?.years ?? []), now.getFullYear(), year])).sort();
+  // Every year that has transactions (not just statement end years), plus the current
+  // year and whatever is selected, so the list never loses the active choice.
+  const years = Array.from(
+    new Set([...(dash?.years ?? []), ...(tracker?.years ?? []), now.getFullYear(), year]),
+  ).sort((a, b) => a - b);
 
   return (
     <section className="space-y-6">
@@ -269,8 +273,9 @@ export default function DashboardPage() {
           </div>
         )}
         <p className="mt-2 text-xs text-slate-500">
-          ✓ statement uploaded and reconciled · ! needs review · · no statement. A statement counts
-          for the month its period ends in.
+          ✓ statement uploaded and reconciled · ! needs review · · no statement. A statement
+          counts for the month its period ends in and for every month wholly inside its period,
+          so a long statement fills each month it spans.
         </p>
       </section>
     </section>

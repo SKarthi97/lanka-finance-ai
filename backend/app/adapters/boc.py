@@ -10,6 +10,7 @@ then checks that the amount equals the balance change.
 """
 
 import re
+from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
@@ -20,7 +21,8 @@ VERSION = "1"
 
 _STATEMENT_DATE = re.compile(r"DATE:\s*(\d{2}/\d{2}/\d{4})", re.IGNORECASE)
 _DAY_MONTH = re.compile(r"^\d{2}/\d{2}$")
-_AMOUNT = re.compile(r"^\(?-?\d[\d,]*\.\d{2}\)?$")
+# BOC prints a zero as ".00" (no leading digit), e.g. an opening balance of nil.
+_AMOUNT = re.compile(r"^\(?-?(?:\d[\d,]*)?\.\d{2}\)?$")
 _PAGE_FOOTER = re.compile(r"^PAGE\s+\d+(\s+OF\s+\d+)?$", re.IGNORECASE)
 _COLUMN_HEADERS = {"PARTICULARS", "PAYMENTS", "RECEIPTS", "BALANCE", "DATE"}
 _REQUIRED_HEADERS = ("PARTICULARS", "PAYMENTS", "RECEIPTS", "BALANCE")
@@ -48,16 +50,24 @@ def _money(text: str) -> Decimal | None:
     return -amount if negative else amount
 
 
-def _resolve_date(day_month: str, statement_date: date) -> date | None:
-    """DD/MM -> a date in the statement's year, or the year before if that is in the future."""
-    day, month = (int(part) for part in day_month.split("/"))
-    try:
-        candidate = date(statement_date.year, month, day)
-        if candidate > statement_date:
-            candidate = date(statement_date.year - 1, month, day)
-        return candidate
-    except ValueError:
-        return None
+def _assign_years(day_months: list[tuple[int, int]], statement_date: date) -> list[int]:
+    """Years for DD/MM dates listed oldest first, found by walking back from the end.
+
+    Statement rows are chronological and the statement ends on `statement_date`, so the
+    last row is in that year. Going backwards, the year drops by one whenever the date
+    jumps forward in the calendar (e.g. a December row before a January row). This works
+    for statements spanning many years, where the printed dates carry no year.
+    """
+    years = [0] * len(day_months)
+    year = statement_date.year
+    later = (statement_date.month, statement_date.day)
+    for index in range(len(day_months) - 1, -1, -1):
+        day, month = day_months[index]
+        if (month, day) > later:
+            year -= 1
+        years[index] = year
+        later = (month, day)
+    return years
 
 
 def _find_account_number(lines: list[tuple[int, str]]) -> str | None:
@@ -115,13 +125,26 @@ class BocAdapter:
             raise ParseError("format_mismatch")
 
         lines: list[tuple[int, str]] = []
+        first_page_header: set[str] = set()
         for page_no, page_text in enumerate(pages, start=1):
+            seen_first_date = False
             for raw in page_text.splitlines():
                 text = raw.strip()
                 if not text:
                     continue
                 if text.upper() in _COLUMN_HEADERS or _PAGE_FOOTER.match(text):
                     continue  # repeated per-page headers / footers
+                if _DAY_MONTH.fullmatch(text):
+                    seen_first_date = True
+                if page_no == 1:
+                    if not seen_first_date:
+                        first_page_header.add(text)
+                elif text in first_page_header and not (
+                    _AMOUNT.fullmatch(text) or _DAY_MONTH.fullmatch(text)
+                ):
+                    # Page 1's header (name, address, titles) repeated on a later page.
+                    # Without this it would be glued onto the previous row's description.
+                    continue
                 lines.append((page_no, text))
 
         statement = ParsedStatement(
@@ -172,6 +195,7 @@ class BocAdapter:
                 state.lines.append(text)
 
         state.flush()
+        state.finish()
         return statement
 
 
@@ -184,6 +208,9 @@ class _State:
         self.page_no = 1
         self.lines: list[str] = []
         self.previous_balance: Decimal | None = None
+        self.seen_b_f = False
+        self.opening_day_month: tuple[int, int] | None = None
+        self.rows: list[_Row] = []
         self.seq = 0
 
     def start(self, date_text: str, page_no: int) -> None:
@@ -201,30 +228,48 @@ class _State:
 
         statement = self.statement
         amounts: list[Decimal] = []
-        descriptions: list[str] = []
+        before_amounts: list[str] = []
+        after_amounts: list[str] = []
         for line in self.lines:
             if _AMOUNT.fullmatch(line):
                 amount = _money(line)
                 if amount is not None:
                     amounts.append(amount)
             else:
-                descriptions.append(line)
+                (after_amounts if amounts else before_amounts).append(line)
 
-        description = " ".join(descriptions).strip()
+        # A row reads: date, description (possibly wrapped), then amounts. Text after the
+        # amounts is page furniture (footer, next page's header, end-of-statement notes)
+        # that landed in the same block, so it is not part of the description. Rows whose
+        # text only appears after the amounts keep the old behaviour as a fallback.
+        description = " ".join(before_amounts or after_amounts).strip()
         upper = description.upper()
         date_text, page_no = self.date_text, self.page_no
+        day, month = (int(part) for part in date_text.split("/"))
         self.reset()
 
         if not description:
             return
 
         if "BALANCE B/F" in upper:
-            if len(amounts) == 1:
-                statement.opening_balance = amounts[0]
-                self.previous_balance = amounts[0]
-                statement.period_start = _resolve_date(date_text, statement.statement_date)
-            else:
-                statement.issues.append(Issue("opening_balance_unidentified", page_no))
+            if not self.seen_b_f:
+                # The FIRST B/F line is the opening balance. If it cannot be read, a
+                # later page's carry-forward must not stand in for it.
+                self.seen_b_f = True
+                if not amounts:
+                    statement.issues.append(Issue("opening_balance_unidentified", page_no))
+                else:
+                    if len(amounts) > 1:
+                        # The balance column is the rightmost. Reconciliation still
+                        # decides whether this reading was right.
+                        statement.issues.append(Issue("opening_balance_ambiguous", page_no))
+                    statement.opening_balance = amounts[-1]
+                    self.previous_balance = amounts[-1]
+                    self.opening_day_month = (day, month)  # year is resolved in finish()
+            elif amounts and amounts[-1] != self.previous_balance:
+                # A page carry-forward must continue exactly where the last row ended.
+                # It never replaces the statement's opening balance.
+                statement.issues.append(Issue("carry_forward_mismatch", page_no))
             return
 
         # Statement summary lines are not transactions.
@@ -238,11 +283,6 @@ class _State:
         amount, balance = amounts
         if amount < 0:
             statement.issues.append(Issue("negative_amount", page_no))
-            return
-
-        transaction_date = _resolve_date(date_text, statement.statement_date)
-        if transaction_date is None:
-            statement.issues.append(Issue("invalid_date", page_no))
             return
 
         debit = credit = Decimal("0.00")
@@ -262,11 +302,12 @@ class _State:
                 issue_code = "balance_mismatch"
 
         self.seq += 1
-        statement.transactions.append(
-            ParsedTransaction(
+        self.rows.append(
+            _Row(
                 seq=self.seq,
                 page_no=page_no,
-                date=transaction_date,
+                day=day,
+                month=month,
                 description=description,
                 debit=debit.quantize(_CENTS),
                 credit=credit.quantize(_CENTS),
@@ -277,3 +318,49 @@ class _State:
             statement.issues.append(Issue(issue_code, page_no, self.seq))
 
         self.previous_balance = balance
+
+    def finish(self) -> None:
+        """Resolve every date's year at once (needs the whole statement), then build rows."""
+        statement = self.statement
+        dated = ([self.opening_day_month] if self.opening_day_month else []) + [
+            (row.day, row.month) for row in self.rows
+        ]
+        years = _assign_years(dated, statement.statement_date)
+
+        if self.opening_day_month:
+            day, month = self.opening_day_month
+            try:
+                statement.period_start = date(years[0], month, day)
+            except ValueError:
+                statement.issues.append(Issue("invalid_date"))
+            years = years[1:]
+
+        for row, year in zip(self.rows, years):
+            try:
+                row_date = date(year, row.month, row.day)
+            except ValueError:
+                statement.issues.append(Issue("invalid_date", row.page_no, row.seq))
+                continue
+            statement.transactions.append(
+                ParsedTransaction(
+                    seq=row.seq,
+                    page_no=row.page_no,
+                    date=row_date,
+                    description=row.description,
+                    debit=row.debit,
+                    credit=row.credit,
+                    balance=row.balance,
+                )
+            )
+
+
+@dataclass
+class _Row:
+    seq: int
+    page_no: int
+    day: int
+    month: int
+    description: str
+    debit: Decimal
+    credit: Decimal
+    balance: Decimal

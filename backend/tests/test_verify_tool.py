@@ -66,3 +66,18 @@ def test_unrecognised_layout_is_reported_without_content(tmp_path):
 def test_failed_parse_prints_only_the_code(tmp_path):
     output = run(tmp_path, pdf_from_pages([boc_lines()[:2] + ["PARTICULARS", "PAYMENTS", "RECEIPTS", "BALANCE"]]))
     assert "parse: FAILED (statement_date_not_found)" in output
+
+
+def test_blocks_mode_prints_only_masked_balance_rows(tmp_path):
+    pdf = boc_pdf(
+        account=FAKE_ACCOUNT,
+        rows=[("05/09", "ATM CASH WITHDRAWAL SYNTHETIC SHOP", "100.00", "900.00")],
+    )
+    output = run(tmp_path, pdf, "--blocks")
+
+    assert "BALANCE B/F: 1 occurrence(s)" in output
+    assert "BALANCE C/F: 1 occurrence(s)" in output
+    assert ">> BALANCE B/F" in output  # the marker row itself is marked
+    assert "9999.99" in output  # the opening balance keeps only its shape
+    for secret in SECRETS:
+        assert secret not in output
