@@ -15,7 +15,7 @@ import {
   setAmountsHidden,
 } from "@/lib/format";
 
-const select = "rounded border border-slate-300 bg-white px-2 py-1 text-sm";
+const select = "rounded border border-slate-300 bg-surface px-2 py-1 text-sm";
 
 function Card({
   label,
@@ -30,7 +30,7 @@ function Card({
 }) {
   const color = tone === "good" ? "text-green-700" : tone === "bad" ? "text-red-700" : "";
   return (
-    <div className="rounded border border-slate-200 bg-white p-4">
+    <div className="rounded border border-slate-200 bg-surface p-4">
       <div className="text-xs text-slate-500">{label}</div>
       <div className={`mt-1 text-xl font-semibold tabular-nums ${color}`}>{value}</div>
       {hint && <div className="mt-1 text-xs text-slate-500">{hint}</div>}
@@ -53,7 +53,7 @@ function CategoryBars({ items, filter }: { items: CategoryTotal[]; filter: strin
     : top;
 
   return (
-    <ul className="space-y-1.5 rounded border border-slate-200 bg-white p-4 text-sm">
+    <ul className="space-y-1.5 rounded border border-slate-200 bg-surface p-4 text-sm">
       {rows.map((c) => {
         const share = total > 0 ? (Number(c.expense) / total) * 100 : 0;
         const uncategorised = c.category_id === null;
@@ -79,7 +79,7 @@ function CategoryBars({ items, filter }: { items: CategoryTotal[]; filter: strin
             </div>
             <div className="mt-0.5 h-1.5 rounded bg-slate-100" aria-hidden="true">
               <div
-                className={`h-1.5 rounded ${uncategorised ? "bg-amber-400" : "bg-slate-700"}`}
+                className={`h-1.5 rounded ${uncategorised ? "bg-amber-400" : "bg-accent"}`}
                 style={{ width: `${Math.max(share, 1)}%` }}
               />
             </div>
@@ -97,6 +97,7 @@ function PeriodCards({
   previous,
   previousLabel,
   filter,
+  action,
 }: {
   title: string;
   totals: Totals | undefined;
@@ -104,6 +105,7 @@ function PeriodCards({
   previous?: Totals;
   previousLabel?: string;
   filter: string; // query string for the transactions drill-down, e.g. "&year=2026&month=10"
+  action?: React.ReactNode; // shown at the right of the heading (the month picker)
 }) {
   const net = Number(totals?.net ?? 0);
   const rate = totals && Number(totals.income) > 0 ? Math.round((net / Number(totals.income)) * 100) : null;
@@ -112,7 +114,10 @@ function PeriodCards({
   const transfers = Number(totals?.transfers_in ?? 0) + Number(totals?.transfers_out ?? 0);
   return (
     <section>
-      <h2 className="mb-2 font-medium">{title}</h2>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h2 className="font-medium">{title}</h2>
+        {action}
+      </div>
       <div className="grid gap-3 sm:grid-cols-3">
         <Card label="Income" value={formatMoney(totals?.income)} tone="good" hint={vs("income") ?? undefined} />
         <Card label="Expense" value={formatMoney(totals?.expense)} tone="bad" hint={vs("expense") ?? undefined} />
@@ -156,7 +161,6 @@ export default function DashboardPage() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
-  const [trackerYear, setTrackerYear] = useState(now.getFullYear());
   const [bank, setBank] = useState("");
   const [hidden, setHidden] = useState(false);
 
@@ -174,16 +178,20 @@ export default function DashboardPage() {
     api<Dashboard>(`/dashboard?year=${year}&month=${month}${bankParam}`)
       .then(setDash)
       .catch(() => setDash(null));
-    api<Trend>(`/dashboard/trend?year=${year}&month=${month}&months=12${bankParam}`)
-      .then(setTrend)
-      .catch(() => setTrend(null));
   }, [year, month, bankParam]);
 
+  // The charts show January to December of the chosen year.
   useEffect(() => {
-    api<Tracker>(`/tracker?year=${trackerYear}`)
+    api<Trend>(`/dashboard/trend?year=${year}&month=12&months=12${bankParam}`)
+      .then(setTrend)
+      .catch(() => setTrend(null));
+  }, [year, bankParam]);
+
+  useEffect(() => {
+    api<Tracker>(`/tracker?year=${year}`)
       .then(setTracker)
       .catch(() => setTracker(null));
-  }, [trackerYear]);
+  }, [year]);
 
   const isNow = year === now.getFullYear() && month === now.getMonth() + 1;
   const monthTitle = isNow ? "This month" : `${MONTHS_LONG[month - 1]} ${year}`;
@@ -193,12 +201,6 @@ export default function DashboardPage() {
   const previousLabel = MONTHS[prevIndex % 12];
 
   const emptyPeriod = dash?.has_data && dash.month.transactions === 0 && dash.year.transactions === 0;
-
-  function shift(delta: number) {
-    const index = year * 12 + (month - 1) + delta;
-    setYear(Math.floor(index / 12));
-    setMonth((index % 12) + 1);
-  }
 
   function toggleHidden() {
     setAmountsHidden(!hidden);
@@ -210,7 +212,6 @@ export default function DashboardPage() {
     const [y, m] = dash.as_of.split("-").map(Number);
     setYear(y);
     setMonth(m);
-    setTrackerYear(y);
   }
 
   // Every year that has transactions (not just statement end years), plus the current
@@ -282,9 +283,9 @@ export default function DashboardPage() {
         <>
           {missingMonths} month{missingMonths === 1 ? "" : "s"} without a statement in {tracker?.year},
           between statements you have.{" "}
-          <a href="#tracker" className="underline">
+          <Link href="/upload#tracker" className="underline">
             See the tracker
-          </a>
+          </Link>
         </>
       ),
     });
@@ -307,31 +308,6 @@ export default function DashboardPage() {
               ))}
             </select>
           )}
-          <button onClick={() => shift(-1)} aria-label="Previous month" className={`${select} px-3`}>
-            ←
-          </button>
-          <select aria-label="Month" value={month} onChange={(e) => setMonth(Number(e.target.value))} className={select}>
-            {MONTHS_LONG.map((name, index) => (
-              <option key={name} value={index + 1}>
-                {name}
-              </option>
-            ))}
-          </select>
-          <select aria-label="Year" value={year} onChange={(e) => setYear(Number(e.target.value))} className={select}>
-            {years.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={() => shift(1)}
-            disabled={isNow}
-            aria-label="Next month"
-            className={`${select} px-3 disabled:opacity-40`}
-          >
-            →
-          </button>
           <button
             onClick={toggleHidden}
             aria-pressed={hidden}
@@ -377,7 +353,7 @@ export default function DashboardPage() {
                     : undefined
                 }
               />
-              <div className="overflow-x-auto rounded border border-slate-200 bg-white">
+              <div className="overflow-x-auto rounded border border-slate-200 bg-surface">
                 <table className="w-full text-left text-sm">
                   <thead className="border-b border-slate-200 text-slate-600">
                     <tr>
@@ -422,10 +398,24 @@ export default function DashboardPage() {
           )}
 
           <section>
-            <h2 className="mb-2 font-medium">Last 12 months</h2>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h2 className="font-medium">Income, expense and balance by month</h2>
+              <select
+                aria-label="Year"
+                value={year}
+                onChange={(e) => setYear(Number(e.target.value))}
+                className={select}
+              >
+                {years.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            </div>
             {trend ? (
               <div className="grid gap-3 lg:grid-cols-2">
-                <div className="rounded border border-slate-200 bg-white p-4">
+                <div className="rounded border border-slate-200 bg-surface p-4">
                   <h3 className="mb-1 text-sm text-slate-600">Income and expense</h3>
                   <IncomeExpenseChart
                     months={trend.months}
@@ -437,7 +427,7 @@ export default function DashboardPage() {
                     }}
                   />
                 </div>
-                <div className="rounded border border-slate-200 bg-white p-4">
+                <div className="rounded border border-slate-200 bg-surface p-4">
                   <h3 className="mb-1 text-sm text-slate-600">Balance</h3>
                   <BalanceChart months={trend.months} />
                 </div>
@@ -449,6 +439,20 @@ export default function DashboardPage() {
 
           <PeriodCards
             title={monthTitle}
+            action={
+              <select
+                aria-label="Month"
+                value={month}
+                onChange={(e) => setMonth(Number(e.target.value))}
+                className={select}
+              >
+                {MONTHS_LONG.map((name, index) => (
+                  <option key={name} value={index + 1}>
+                    {name} {year}
+                  </option>
+                ))}
+              </select>
+            }
             totals={dash?.month}
             byCategory={dash?.month_by_category}
             previous={dash?.previous_month}
@@ -461,7 +465,7 @@ export default function DashboardPage() {
               <h3 className="mb-1 text-sm text-slate-600">
                 Largest expenses, {MONTHS_LONG[month - 1]} {year}
               </h3>
-              <ul className="divide-y divide-slate-100 rounded border border-slate-200 bg-white text-sm">
+              <ul className="divide-y divide-slate-100 rounded border border-slate-200 bg-surface text-sm">
                 {dash.top_expenses.map((t) => (
                   <li key={t.id} className="flex items-baseline justify-between gap-3 px-3 py-2">
                     <span className="min-w-0">
@@ -490,100 +494,6 @@ export default function DashboardPage() {
           </p>
         </>
       )}
-
-      {/* Statement tracker */}
-      <section id="tracker">
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="font-medium">Statement tracker</h2>
-          <select
-            aria-label="Tracker year"
-            value={trackerYear}
-            onChange={(e) => setTrackerYear(Number(e.target.value))}
-            className={select}
-          >
-            {(tracker?.years ?? [trackerYear]).map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {!tracker || tracker.rows.length === 0 ? (
-          <p className="text-sm text-slate-500">
-            Nothing to track yet. Each uploaded statement ticks its month here.
-          </p>
-        ) : (
-          <div className="overflow-x-auto rounded border border-slate-200 bg-white">
-            <table className="w-full text-center text-sm">
-              <thead className="border-b border-slate-200 text-slate-600">
-                <tr>
-                  <th className="px-3 py-2 text-left font-medium">Bank</th>
-                  {MONTHS.map((name) => (
-                    <th key={name} className="px-2 py-2 font-medium">
-                      {name}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {tracker.rows.map((row, index) => (
-                  <tr key={index} className="border-b border-slate-100 last:border-0">
-                    <td className="whitespace-nowrap px-3 py-2 text-left">
-                      <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium uppercase">
-                        {row.bank_code ?? "?"}
-                      </span>
-                      {row.account_last4 ? (
-                        <span className="ml-2 text-xs text-slate-500">•••• {row.account_last4}</span>
-                      ) : (
-                        <span className="ml-2 text-xs text-slate-400" title={NO_ACCOUNT_HINT}>
-                          account not detected
-                        </span>
-                      )}
-                    </td>
-                    {MONTHS.map((name, i) => {
-                      const cell = row.cells[String(i + 1)];
-                      const future =
-                        tracker.year > now.getFullYear() ||
-                        (tracker.year === now.getFullYear() && i > now.getMonth());
-                      return (
-                        <td key={name} className="px-2 py-2">
-                          {cell ? (
-                            <Link
-                              href={`/documents/${cell.document_id}`}
-                              title={cell.status === "ok" ? `${name}: statement reconciled` : `${name}: needs review`}
-                              aria-label={`${name} ${tracker.year}: ${cell.status === "ok" ? "statement uploaded" : "needs review"}`}
-                              className={
-                                cell.status === "ok"
-                                  ? "font-semibold text-green-700"
-                                  : "font-semibold text-amber-600"
-                              }
-                            >
-                              {cell.status === "ok" ? "✓" : "!"}
-                            </Link>
-                          ) : (
-                            <span
-                              className={future ? "text-slate-200" : "text-slate-300"}
-                              title={future ? "Not due yet" : `${name}: no statement`}
-                            >
-                              ·
-                            </span>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <p className="mt-2 text-xs text-slate-500">
-          ✓ statement uploaded and reconciled · ! needs review · · no statement. A statement
-          counts for the month its period ends in and for every month wholly inside its period,
-          so a long statement fills each month it spans.
-        </p>
-      </section>
     </section>
   );
 }

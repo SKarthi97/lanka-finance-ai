@@ -14,7 +14,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded border border-slate-200 bg-white p-4">
+    <section className="rounded border border-slate-200 bg-surface p-4">
       <h2 className="mb-2 font-medium">{title}</h2>
       <dl>{children}</dl>
     </section>

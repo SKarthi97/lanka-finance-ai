@@ -91,7 +91,7 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={busy || setupRequired === null}
-          className="w-full rounded bg-slate-900 px-3 py-2 text-white disabled:opacity-50"
+          className="w-full rounded bg-accent px-3 py-2 text-accent-fg disabled:opacity-50"
         >
           {setupRequired ? "Create account" : "Sign in"}
         </button>

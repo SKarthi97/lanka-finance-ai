@@ -10,9 +10,9 @@ const W = 720;
 const H = 200;
 const PAD = { top: 12, right: 8, bottom: 24, left: 8 };
 
-const INCOME = "#2563eb"; // blue
-const EXPENSE = "#ea580c"; // orange: distinguishable from blue without relying on red/green
-const BALANCE = "#334155";
+const INCOME = "#60a5fa"; // blue
+const EXPENSE = "#ff7a59"; // coral: distinguishable from blue without relying on red/green
+const BALANCE = "#e2e8f0";
 
 function compact(n: number): string {
   const abs = Math.abs(n);
@@ -46,7 +46,7 @@ export function IncomeExpenseChart({
   return (
     <div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Income and expense by month">
-        <line x1={PAD.left} x2={W - PAD.right} y1={H - PAD.bottom} y2={H - PAD.bottom} stroke="#cbd5e1" />
+        <line x1={PAD.left} x2={W - PAD.right} y1={H - PAD.bottom} y2={H - PAD.bottom} stroke="#434859" />
         {months.map((m, i) => {
           const x = PAD.left + i * slot + slot / 2;
           const inc = (Number(m.income) / max) * plotH;
@@ -55,7 +55,7 @@ export function IncomeExpenseChart({
           return (
             <g key={`${m.year}-${m.month}`}>
               {active && (
-                <rect x={x - slot / 2 + 2} y={PAD.top - 6} width={slot - 4} height={plotH + 6} fill="#f1f5f9" />
+                <rect x={x - slot / 2 + 2} y={PAD.top - 6} width={slot - 4} height={plotH + 6} fill="#2b2e3a" />
               )}
               <rect x={x - barW - 1} y={H - PAD.bottom - inc} width={barW} height={Math.max(inc, 0)} fill={INCOME} rx="2">
                 <title>{`${MONTHS[m.month - 1]} ${m.year} income ${formatMoney(m.income)}`}</title>
@@ -75,7 +75,7 @@ export function IncomeExpenseChart({
               >
                 <title>{`Show ${MONTHS[m.month - 1]} ${m.year}`}</title>
               </rect>
-              <text x={x} y={H - 8} textAnchor="middle" fontSize="11" fill={active ? "#0f172a" : "#64748b"} fontWeight={active ? 600 : 400}>
+              <text x={x} y={H - 8} textAnchor="middle" fontSize="11" fill={active ? "#eef1f6" : "#8a93a3"} fontWeight={active ? 600 : 400}>
                 {MONTHS[m.month - 1]}
               </text>
             </g>
@@ -137,7 +137,7 @@ export function BalanceChart({ months }: { months: TrendMonth[] }) {
   return (
     <div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Total balance at the end of each month">
-        <line x1={PAD.left} x2={W - PAD.right} y1={H - PAD.bottom} y2={H - PAD.bottom} stroke="#cbd5e1" />
+        <line x1={PAD.left} x2={W - PAD.right} y1={H - PAD.bottom} y2={H - PAD.bottom} stroke="#434859" />
         {segments.map((seg, i) => (
           <polyline key={i} points={seg.join(" ")} fill="none" stroke={BALANCE} strokeWidth="2" />
         ))}
@@ -151,7 +151,7 @@ export function BalanceChart({ months }: { months: TrendMonth[] }) {
                   <title>{`${MONTHS[m.month - 1]} ${m.year} balance ${formatMoney(m.balance)}`}</title>
                 </circle>
               )}
-              <text x={x} y={H - 8} textAnchor="middle" fontSize="11" fill="#64748b">
+              <text x={x} y={H - 8} textAnchor="middle" fontSize="11" fill="#8a93a3">
                 {MONTHS[m.month - 1]}
               </text>
             </g>

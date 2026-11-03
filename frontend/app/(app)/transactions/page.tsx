@@ -24,7 +24,7 @@ import {
 
 const PAGE_SIZES = [25, 50, 100];
 
-const select = "rounded border border-slate-300 px-2 py-2 text-sm bg-white";
+const select = "rounded border border-slate-300 px-2 py-2 text-sm bg-surface";
 
 export default function TransactionsPage() {
   const [search, setSearch] = useState("");
@@ -266,7 +266,7 @@ export default function TransactionsPage() {
       {data && data.items.length === 0 ? (
         <p className="text-sm text-slate-500">No transactions found.</p>
       ) : (
-        <div className="overflow-x-auto rounded border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded border border-slate-200 bg-surface">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-200 text-slate-600">
               <tr>
@@ -327,7 +327,7 @@ export default function TransactionsPage() {
                             }`
                           : "Not categorised"
                       }
-                      className="max-w-[10rem] rounded border border-slate-200 bg-white px-1 py-0.5 text-xs"
+                      className="max-w-[10rem] rounded border border-slate-200 bg-surface px-1 py-0.5 text-xs"
                     >
                       <option value="">Uncategorised</option>
                       {categories.map((c) => (

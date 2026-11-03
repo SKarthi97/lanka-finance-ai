@@ -3,13 +3,41 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { api, ApiError, Me, OllamaStatus, setCsrfToken } from "@/lib/api";
+import {
+  api,
+  ApiError,
+  CategorizationStatus,
+  Me,
+  OllamaStatus,
+  setCsrfToken,
+} from "@/lib/api";
+
+const NAV: { heading: string; items: { href: string; label: string; icon: string }[] }[] = [
+  {
+    heading: "Main",
+    items: [
+      { href: "/", label: "Dashboard", icon: "🏠" },
+      { href: "/transactions", label: "Transactions", icon: "🧾" },
+      { href: "/upload", label: "Upload", icon: "📥" },
+    ],
+  },
+  {
+    heading: "Manage",
+    items: [
+      { href: "/categories", label: "Categories", icon: "🏷️" },
+      { href: "/system", label: "System", icon: "🖥️" },
+    ],
+  },
+];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [me, setMe] = useState<Me | null>(null);
   const [ollama, setOllama] = useState<OllamaStatus | null>(null);
+  const [uncategorised, setUncategorised] = useState(0);
+  const [drawer, setDrawer] = useState(false); // sidebar open on small screens
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     api<Me>("/auth/me")
@@ -17,11 +45,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         setCsrfToken(user.csrf_token);
         setMe(user);
         api<OllamaStatus>("/system/ollama").then(setOllama).catch(() => setOllama(null));
+        api<CategorizationStatus>("/categorization/status")
+          .then((s) => setUncategorised(s.uncategorised))
+          .catch(() => undefined);
       })
       .catch((err) => {
         if (err instanceof ApiError && err.status === 401) router.replace("/login");
       });
   }, [router]);
+
+  // Close the drawer after navigating, and on Escape.
+  useEffect(() => setDrawer(false), [pathname]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setDrawer(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   async function logout() {
     await api("/auth/logout", { method: "POST" }).catch(() => undefined);
@@ -29,50 +68,146 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     router.replace("/login");
   }
 
+  function submitSearch(event: React.FormEvent) {
+    event.preventDefault();
+    const q = search.trim();
+    // A full navigation, so the Transactions page re-reads the filter even when already open.
+    window.location.assign(q ? `/transactions?q=${encodeURIComponent(q)}` : "/transactions");
+  }
+
   if (!me) {
     return <p className="p-6 text-sm text-slate-500">Loading…</p>;
   }
 
   const aiUnavailable = ollama !== null && (!ollama.reachable || !ollama.model_present);
-
-  const link = (href: string, label: string) => (
-    <Link
-      href={href}
-      className={
-        pathname === href ? "font-medium text-slate-900" : "text-slate-600 hover:text-slate-900"
-      }
-    >
-      {label}
-    </Link>
-  );
+  const initials = me.username.slice(0, 2).toUpperCase();
 
   return (
-    <div className="mx-auto max-w-5xl px-4">
-      <header className="flex items-center justify-between border-b border-slate-200 py-4">
-        <nav className="flex gap-5 text-sm">
-          <span className="font-semibold">Lanka Finance AI</span>
-          {link("/", "Dashboard")}
-          {link("/upload", "Upload")}
-          {link("/transactions", "Transactions")}
-          {link("/categories", "Categories")}
-          {link("/system", "System")}
-        </nav>
-        <div className="flex items-center gap-3 text-sm text-slate-600">
-          <span>{me.username}</span>
-          <button onClick={logout} className="rounded border border-slate-300 px-2 py-1">
-            Sign out
-          </button>
+    <div className="min-h-screen">
+      {/* Top bar */}
+      <header className="fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-3 border-b border-slate-200 bg-chrome px-4">
+        <button
+          onClick={() => setDrawer((open) => !open)}
+          aria-label={drawer ? "Close menu" : "Open menu"}
+          aria-expanded={drawer}
+          className="rounded p-2 text-lg leading-none text-slate-700 hover:bg-slate-100 lg:hidden"
+        >
+          ☰
+        </button>
+        <Link href="/" className="text-lg font-extrabold tracking-tight text-slate-900">
+          Lanka<span className="text-accent">Finance</span>
+          <span className="ml-1 hidden text-xs font-medium text-slate-500 sm:inline">AI</span>
+        </Link>
+
+        <form onSubmit={submitSearch} role="search" className="mx-2 max-w-md flex-1">
+          <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-surface px-3 py-1.5 text-sm focus-within:border-accent">
+            <span aria-hidden="true">🔍</span>
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search transactions…"
+              aria-label="Search transactions"
+              className="w-full bg-transparent outline-none"
+            />
+          </label>
+        </form>
+
+        <div className="ml-auto flex items-center gap-2">
+          <Link
+            href="/system"
+            aria-label="System settings"
+            title="System"
+            className="rounded p-2 text-lg leading-none hover:bg-slate-100"
+          >
+            ⚙️
+          </Link>
+          <span
+            title={me.username}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-sm font-bold text-accent-fg"
+          >
+            {initials}
+          </span>
         </div>
       </header>
 
-      {aiUnavailable && (
-        <div role="status" className="mt-4 rounded bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Local AI is unavailable ({ollama?.error ?? "unknown reason"}). Extraction and
-          rule-based categorization continue to work; AI features resume when the model is back.
-        </div>
+      {/* Overlay behind the drawer on small screens */}
+      {drawer && (
+        <button
+          aria-label="Close menu"
+          onClick={() => setDrawer(false)}
+          className="fixed inset-0 top-14 z-20 bg-black/60 lg:hidden"
+        />
       )}
 
-      <main className="py-6">{children}</main>
+      {/* Sidebar: always visible on large screens, a slide-in drawer on small ones */}
+      <aside
+        className={`fixed bottom-0 left-0 top-14 z-20 w-64 overflow-y-auto border-r border-slate-200 bg-rail px-3 py-4 transition-transform duration-200 lg:translate-x-0 ${
+          drawer ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <nav aria-label="Main" className="flex h-full flex-col">
+          {NAV.map((group) => (
+            <div key={group.heading} className="mb-4">
+              <div className="px-3 pb-2 text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                {group.heading}
+              </div>
+              <ul className="space-y-1">
+                {group.items.map((item) => {
+                  const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+                  const badge = item.href === "/categories" && uncategorised > 0 ? uncategorised : 0;
+                  return (
+                    <li key={item.href}>
+                      <Link
+                        href={item.href}
+                        aria-current={active ? "page" : undefined}
+                        className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm ${
+                          active
+                            ? "bg-accent/10 font-medium text-slate-900"
+                            : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                        }`}
+                      >
+                        <span aria-hidden="true" className="w-6 text-center text-lg leading-none">
+                          {item.icon}
+                        </span>
+                        <span className="flex-1">{item.label}</span>
+                        {badge > 0 && (
+                          <span className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-bold text-accent-fg">
+                            {badge > 999 ? "999+" : badge}
+                          </span>
+                        )}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+
+          <div className="mt-auto border-t border-slate-200 pt-3">
+            <div className="px-3 pb-2 text-xs text-slate-500">Signed in as {me.username}</div>
+            <button
+              onClick={logout}
+              className="w-full rounded-lg px-3 py-2.5 text-left text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+            >
+              <span aria-hidden="true" className="mr-3 inline-block w-6 text-center text-lg leading-none">
+                🚪
+              </span>
+              Sign out
+            </button>
+          </div>
+        </nav>
+      </aside>
+
+      <div className="pt-14 lg:pl-64">
+        {aiUnavailable && (
+          <div role="status" className="mx-4 mt-4 rounded bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            Local AI is unavailable ({ollama?.error ?? "unknown reason"}). Extraction and
+            rule-based categorization continue to work; AI features resume when the model is back.
+          </div>
+        )}
+        <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">{children}</main>
+      </div>
     </div>
   );
 }

@@ -149,7 +149,8 @@ the output before sharing it.
   transaction date falls in the chosen month and year (default: the browser's current
   month, so the server's timezone never decides). Until categories exist (Phase 4) these
   include transfers and loan payments. Statements needing review are excluded.
-- **Tracker:** one row per bank/account, one column per month. A statement counts for the
+- **Tracker (on the Upload page, not the dashboard):** one row per bank/account, one column
+  per month. The dashboard's attention panel still counts missing months and links to it. A statement counts for the
   month its period **ends** in and for every month **wholly inside** its period. So a
   31 Oct - 30 Nov statement is the November statement only (a missing October stays
   visible), while a multi-year statement fills every month it spans. The month containing

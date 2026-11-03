@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { StatementTracker } from "@/components/StatementTracker";
 import { api, ApiError, DocumentItem } from "@/lib/api";
 import { ACTIVE_STATUSES, STATUS_LABEL, STATUS_STYLE, explainError } from "@/lib/format";
 
@@ -34,6 +35,9 @@ export default function UploadPage() {
   useEffect(() => {
     loadDocuments();
   }, [loadDocuments]);
+
+  // The tracker reloads whenever a statement is added, removed or changes status.
+  const statusSignature = documents.map((d) => `${d.id}:${d.status}`).join(",");
 
   // Poll while anything is still being processed.
   const hasActive = documents.some((d) => ACTIVE_STATUSES.has(d.status));
@@ -128,7 +132,7 @@ export default function UploadPage() {
     <section className="space-y-6">
       <h1 className="text-xl font-semibold">Upload statements</h1>
 
-      <form onSubmit={onSubmit} className="space-y-4 rounded border border-slate-200 bg-white p-4">
+      <form onSubmit={onSubmit} className="space-y-4 rounded border border-slate-200 bg-surface p-4">
         <label className="block text-sm">
           Bank
           <select
@@ -195,18 +199,20 @@ export default function UploadPage() {
         <button
           type="submit"
           disabled={!file || busy || (needsPassword && !password)}
-          className="rounded bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+          className="rounded bg-accent px-4 py-2 text-sm text-accent-fg disabled:opacity-50"
         >
           {busy ? "Uploading…" : needsPassword ? "Unlock and upload" : "Upload"}
         </button>
       </form>
+
+      <StatementTracker refreshKey={statusSignature} />
 
       <div>
         <h2 className="mb-2 font-medium">Uploaded statements</h2>
         {documents.length === 0 ? (
           <p className="text-sm text-slate-500">Nothing uploaded yet.</p>
         ) : (
-          <div className="overflow-x-auto rounded border border-slate-200 bg-white">
+          <div className="overflow-x-auto rounded border border-slate-200 bg-surface">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-slate-200 text-slate-600">
                 <tr>

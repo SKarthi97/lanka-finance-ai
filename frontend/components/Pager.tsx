@@ -44,7 +44,7 @@ export function Pager({ page, pages, onChange }: Props) {
             key={entry}
             onClick={() => onChange(entry)}
             aria-current={entry === page ? "page" : undefined}
-            className={`${button} ${entry === page ? "border-slate-900 bg-slate-900 text-white" : ""}`}
+            className={`${button} ${entry === page ? "border-accent bg-accent text-accent-fg" : ""}`}
           >
             {entry}
           </button>

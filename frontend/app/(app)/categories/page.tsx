@@ -13,8 +13,8 @@ import { KIND_LABEL, ORIGIN_LABEL } from "@/lib/format";
 
 type Tab = "review" | "categories" | "rules";
 
-const input = "rounded border border-slate-300 bg-white px-2 py-1.5 text-sm";
-const primary = "rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50";
+const input = "rounded border border-slate-300 bg-surface px-2 py-1.5 text-sm";
+const primary = "rounded bg-accent px-3 py-1.5 text-sm text-accent-fg disabled:opacity-50";
 const subtle = "rounded border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50";
 
 function CategorySelect({
@@ -112,7 +112,7 @@ export default function CategoriesPage() {
             aria-selected={tab === t.id}
             onClick={() => setTab(t.id)}
             className={`-mb-px border-b-2 px-3 py-2 text-sm ${
-              tab === t.id ? "border-slate-900 font-medium" : "border-transparent text-slate-600"
+              tab === t.id ? "border-accent font-medium" : "border-transparent text-slate-600"
             }`}
           >
             {t.label}
@@ -167,7 +167,7 @@ function ReviewTab({
       </p>
 
       {status?.ai_enabled && (
-        <div className="flex flex-wrap items-center gap-3 rounded border border-slate-200 bg-white p-3 text-sm">
+        <div className="flex flex-wrap items-center gap-3 rounded border border-slate-200 bg-surface p-3 text-sm">
           <button
             className={subtle}
             disabled={status.ai_pending || queue.total === 0}
@@ -188,11 +188,11 @@ function ReviewTab({
       )}
 
       {queue.groups.length === 0 ? (
-        <p className="rounded border border-slate-200 bg-white p-4 text-sm text-slate-600">
+        <p className="rounded border border-slate-200 bg-surface p-4 text-sm text-slate-600">
           Nothing to review. Every transaction has a category.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded border border-slate-200 bg-surface">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-200 text-slate-600">
               <tr>
@@ -267,7 +267,7 @@ function CategoriesTab({ categories, run }: { categories: CategoryItem[]; run: R
         totals.
       </p>
 
-      <form onSubmit={add} className="flex flex-wrap items-end gap-2 rounded border border-slate-200 bg-white p-3">
+      <form onSubmit={add} className="flex flex-wrap items-end gap-2 rounded border border-slate-200 bg-surface p-3">
         <label className="text-sm">
           New category
           <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={64} className={`${input} mt-1 block`} />
@@ -285,7 +285,7 @@ function CategoriesTab({ categories, run }: { categories: CategoryItem[]; run: R
         </button>
       </form>
 
-      <div className="overflow-x-auto rounded border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded border border-slate-200 bg-surface">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-slate-200 text-slate-600">
             <tr>
@@ -355,7 +355,7 @@ function RulesTab({ rules, categories, run }: { rules: RuleItem[]; categories: C
         and learned corrections beat the built-in ones. A transaction you set by hand is never changed.
       </p>
 
-      <form onSubmit={add} className="flex flex-wrap items-end gap-2 rounded border border-slate-200 bg-white p-3">
+      <form onSubmit={add} className="flex flex-wrap items-end gap-2 rounded border border-slate-200 bg-surface p-3">
         <label className="text-sm">
           Description contains
           <input value={pattern} onChange={(e) => setPattern(e.target.value)} required minLength={2} maxLength={128} className={`${input} mt-1 block`} />
@@ -378,7 +378,7 @@ function RulesTab({ rules, categories, run }: { rules: RuleItem[]; categories: C
         </button>
       </form>
 
-      <div className="overflow-x-auto rounded border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded border border-slate-200 bg-surface">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-slate-200 text-slate-600">
             <tr>

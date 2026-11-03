@@ -165,7 +165,7 @@ export default function DocumentPage() {
         </p>
       )}
 
-      <dl className="grid grid-cols-2 gap-4 rounded border border-slate-200 bg-white p-4 md:grid-cols-4">
+      <dl className="grid grid-cols-2 gap-4 rounded border border-slate-200 bg-surface p-4 md:grid-cols-4">
         <Fact label="Bank" value={doc.bank_code ? doc.bank_code.toUpperCase() : "–"} />
         <Fact label="Account" value={doc.account_last4 ? `•••• ${doc.account_last4}` : "Not found"} />
         <Fact
@@ -200,7 +200,7 @@ export default function DocumentPage() {
           <button
             onClick={accept}
             disabled={busy}
-            className="mt-3 rounded bg-amber-700 px-3 py-1.5 text-white disabled:opacity-50"
+            className="mt-3 rounded bg-accent px-3 py-1.5 text-accent-fg disabled:opacity-50"
           >
             {busy ? "Accepting…" : "Accept anyway"}
           </button>
@@ -208,7 +208,7 @@ export default function DocumentPage() {
       )}
 
       {doc.validation?.declared && Object.keys(doc.validation.declared).length > 0 && (
-        <section className="rounded border border-slate-200 bg-white p-4">
+        <section className="rounded border border-slate-200 bg-surface p-4">
           <h2 className="mb-1 font-medium">Statement totals</h2>
           <p className="mb-2 text-xs text-slate-500">
             What the statement prints about itself, next to what was extracted. For information
@@ -248,7 +248,7 @@ export default function DocumentPage() {
 
       {doc.validation && (
         <div className="grid gap-4 md:grid-cols-2">
-          <section className="rounded border border-slate-200 bg-white p-4">
+          <section className="rounded border border-slate-200 bg-surface p-4">
             <h2 className="mb-2 font-medium">Checks</h2>
             <ul className="space-y-1 text-sm">
               {checks.map(([name, c]) => (
@@ -262,7 +262,7 @@ export default function DocumentPage() {
             </ul>
           </section>
 
-          <section className="rounded border border-slate-200 bg-white p-4">
+          <section className="rounded border border-slate-200 bg-surface p-4">
             <h2 className="mb-2 font-medium">Issues ({issues.length})</h2>
             {issues.length === 0 ? (
               <p className="text-sm text-slate-500">No issues found.</p>
@@ -295,7 +295,7 @@ export default function DocumentPage() {
               {active ? "Processing…" : "No transactions extracted."}
             </p>
           ) : (
-            <div className="overflow-x-auto rounded border border-slate-200 bg-white">
+            <div className="overflow-x-auto rounded border border-slate-200 bg-surface">
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-slate-200 text-slate-600">
                   <tr>
@@ -351,12 +351,12 @@ export default function DocumentPage() {
         <section>
           <h2 className="mb-2 font-medium">Source page</h2>
           {!doc.file_available ? (
-            <p className="rounded border border-slate-200 bg-white p-4 text-sm text-slate-500">
+            <p className="rounded border border-slate-200 bg-surface p-4 text-sm text-slate-500">
               The original PDF is not stored (it is deleted after a statement reconciles). Set
               RETAIN_DOCUMENTS=true to keep originals for checking rows against the page.
             </p>
           ) : selectedPage === null ? (
-            <p className="rounded border border-slate-200 bg-white p-4 text-sm text-slate-500">
+            <p className="rounded border border-slate-200 bg-surface p-4 text-sm text-slate-500">
               Click a transaction to see the page it came from.
             </p>
           ) : (
@@ -384,7 +384,7 @@ export default function DocumentPage() {
               <img
                 src={`/api/documents/${doc.id}/pages/${selectedPage}/image`}
                 alt={`Page ${selectedPage} of the original statement`}
-                className="w-full rounded border border-slate-200 bg-white"
+                className="w-full rounded border border-slate-200 bg-surface"
               />
             </div>
           )}
