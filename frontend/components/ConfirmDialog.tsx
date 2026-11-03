@@ -11,7 +11,9 @@ export type ConfirmOptions = {
   tone?: "default" | "danger";
 };
 
-type Confirm = (options: ConfirmOptions) => Promise<boolean>;
+/** true = confirmed, false = the cancel button, null = dismissed (clicked outside or Escape).
+ * Both false and null are falsy, so `if (!(await confirm(...))) return;` treats them alike. */
+type Confirm = (options: ConfirmOptions) => Promise<boolean | null>;
 
 const ConfirmContext = createContext<Confirm>(async () => false);
 
@@ -23,14 +25,14 @@ export function useConfirm(): Confirm {
 export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   const [pending, setPending] = useState<{
     options: ConfirmOptions;
-    resolve: (answer: boolean) => void;
+    resolve: (answer: boolean | null) => void;
   } | null>(null);
   const opener = useRef<HTMLElement | null>(null);
   const dialog = useRef<HTMLDivElement>(null);
 
   const confirm = useCallback<Confirm>(
     (options) =>
-      new Promise<boolean>((resolve) => {
+      new Promise<boolean | null>((resolve) => {
         opener.current = document.activeElement as HTMLElement | null;
         setPending({ options, resolve });
       }),
@@ -38,7 +40,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   );
 
   const answer = useCallback(
-    (value: boolean) => {
+    (value: boolean | null) => {
       pending?.resolve(value);
       setPending(null);
       opener.current?.focus?.(); // hand focus back to what opened the dialog
@@ -51,7 +53,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        answer(false);
+        answer(null);
       } else if (event.key === "Tab" && dialog.current) {
         // Keep keyboard focus inside the dialog.
         const buttons = Array.from(dialog.current.querySelectorAll<HTMLElement>("button"));
@@ -79,7 +81,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
       {options && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onMouseDown={(e) => e.target === e.currentTarget && answer(false)}
+          onMouseDown={(e) => e.target === e.currentTarget && answer(null)}
         >
           <div
             ref={dialog}

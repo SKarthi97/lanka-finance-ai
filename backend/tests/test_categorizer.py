@@ -198,6 +198,23 @@ def test_correcting_one_transaction_sticks_and_offers_to_learn(logged_in, sessio
     assert rows["MYSTERY MERCHANT 222"]["category_id"] is None  # the sibling is untouched
 
 
+def test_preview_reports_similar_rows_without_changing_anything(logged_in, session_factory, test_settings):
+    client, csrf = run(logged_in, session_factory, test_settings)
+    shopping = categories(client)["Shopping"]["id"]
+    target = by_description(client)["MYSTERY MERCHANT 111"]
+    before = target["category_id"], target["classification_source"]
+
+    body = client.put(
+        f"/api/transactions/{target['id']}/category",
+        json={"category_id": shopping, "preview": True},
+        headers=HEADERS(csrf),
+    ).json()
+    assert (body["category_name"], body["similar_count"], body["changed"]) == ("Shopping", 1, 0)
+
+    after = by_description(client)["MYSTERY MERCHANT 111"]
+    assert (after["category_id"], after["classification_source"]) == before
+
+
 def test_learning_a_rule_applies_it_to_similar_rows_and_future_statements(
     logged_in, session_factory, test_settings
 ):

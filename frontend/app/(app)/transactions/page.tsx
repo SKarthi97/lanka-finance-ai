@@ -192,33 +192,35 @@ export default function TransactionsPage() {
 
   async function changeCategory(t: TransactionItem, value: string) {
     const categoryId = value ? Number(value) : null;
+    const url = `/transactions/${t.id}/category`;
     try {
-      const result = await api<CorrectionResult>(`/transactions/${t.id}/category`, {
+      // Ask first, save after: nothing changes unless you press one of the dialog's buttons.
+      const preview = await api<CorrectionResult>(url, {
         method: "PUT",
-        json: { category_id: categoryId },
+        json: { category_id: categoryId, preview: true },
       });
-      // Offer to learn from the correction when other transactions look the same.
-      const learn =
-        categoryId !== null &&
-        result.similar_count > 0 &&
-        (await confirm({
-          title: `Use “${result.category_name}” for similar transactions?`,
+      let createRule = false;
+      if (categoryId !== null && preview.similar_count > 0) {
+        const answer = await confirm({
+          title: `Use “${preview.category_name}” for similar transactions?`,
           message: (
             <>
-              {result.similar_count} other transaction{result.similar_count === 1 ? "" : "s"} look like{" "}
-              <span className="font-medium text-slate-900">“{result.stem}”</span>. Apply this category
-              to {result.similar_count === 1 ? "it" : "them"} and remember it for future statements?
+              {preview.similar_count} other transaction{preview.similar_count === 1 ? "" : "s"} look like{" "}
+              <span className="font-medium text-slate-900">“{preview.stem}”</span>. Apply this category
+              to {preview.similar_count === 1 ? "it" : "them"} and remember it for future statements?
             </>
           ),
           confirmLabel: "Apply to all",
           cancelLabel: "Only this one",
-        }));
-      if (learn) {
-        await api<CorrectionResult>(`/transactions/${t.id}/category`, {
-          method: "PUT",
-          json: { category_id: categoryId, create_rule: true },
         });
+        // Clicking outside the dialog (or Escape) means "never mind": keep the old category.
+        if (answer === null) return;
+        createRule = answer;
       }
+      await api<CorrectionResult>(url, {
+        method: "PUT",
+        json: { category_id: categoryId, create_rule: createRule },
+      });
       setReloadKey((n) => n + 1);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not change the category.");

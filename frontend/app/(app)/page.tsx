@@ -115,7 +115,11 @@ function PeriodCards({
   previousLabel,
   filter,
   action,
+  level = 2,
+  children,
 }: {
+  level?: 2 | 3; // heading level: 3 when this block sits inside another section
+  children?: React.ReactNode; // extra content shown after the category bars
   title: string;
   totals: Totals | undefined;
   byCategory: CategoryTotal[] | undefined;
@@ -132,10 +136,12 @@ function PeriodCards({
     comparable && previousLabel ? compareText(totals![field], previous![field], previousLabel) : null;
   const saving = totals ? savingNote(totals) : null;
   const transfers = Number(totals?.transfers_in ?? 0) + Number(totals?.transfers_out ?? 0);
+  const Heading = level === 3 ? "h3" : "h2";
+  const Sub = level === 3 ? "h4" : "h3";
   return (
     <section>
       <div className="mb-2 flex items-center justify-between gap-3">
-        <h2 className="font-medium">{title}</h2>
+        <Heading className={level === 3 ? "text-sm font-medium text-slate-700" : "font-medium"}>{title}</Heading>
         {action}
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
@@ -170,9 +176,10 @@ function PeriodCards({
       )}
 
       <div className="mt-3">
-        <h3 className="mb-1 text-sm text-slate-600">Spending by category</h3>
+        <Sub className="mb-1 text-sm text-slate-600">Spending by category</Sub>
         {byCategory && <CategoryBars items={byCategory} filter={filter} />}
       </div>
+      {children}
     </section>
   );
 }
@@ -250,8 +257,9 @@ export default function DashboardPage() {
   }, [year]);
 
   const isNow = year === now.getFullYear() && month === now.getMonth() + 1;
-  const monthTitle = isNow ? "This month" : `${MONTHS_LONG[month - 1]} ${year}`;
-  const yearTitle = year === now.getFullYear() ? "This year" : String(year);
+  // Always name the period: "This month" is ambiguous once the pickers change it.
+  const monthTitle = `${MONTHS_LONG[month - 1]} ${year}${isNow ? " (this month)" : ""}`;
+  const yearTitle = `${year} totals${year === now.getFullYear() ? " (this year)" : ""}`;
 
   const prevIndex = year * 12 + (month - 1) - 1;
   const previousLabel = MONTHS[prevIndex % 12];
@@ -480,7 +488,7 @@ export default function DashboardPage() {
         <>
           {/* Current finance */}
           <section>
-            <h2 className="mb-2 font-medium">Current balance</h2>
+            <h2 className="mb-2 font-medium">Overview</h2>
             <div className="mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Card
                 label="Total across accounts (LKR)"
@@ -510,6 +518,7 @@ export default function DashboardPage() {
               />
             </div>
             <div>
+              <h3 className="mb-1 text-sm text-slate-600">Balance by account</h3>
               <div className="overflow-x-auto rounded border border-slate-200 bg-surface">
                 <table className="w-full text-left text-sm">
                   <thead className="border-b border-slate-200 text-slate-600">
@@ -556,7 +565,12 @@ export default function DashboardPage() {
 
           <section>
             <div className="mb-2 flex items-center justify-between gap-3">
-              <h2 className="font-medium">Income, expense and balance by month</h2>
+              <div>
+                <h2 className="font-medium">Year {year}: income, expense and balance</h2>
+                <p className="text-xs text-slate-500">
+                  Month by month, then the year’s totals. Click a month in the chart to see it below.
+                </p>
+              </div>
               <select
                 aria-label="Year"
                 value={year}
@@ -573,7 +587,7 @@ export default function DashboardPage() {
             {trend ? (
               <div className="grid gap-3 lg:grid-cols-2">
                 <div className="rounded border border-slate-200 bg-surface p-4">
-                  <h3 className="mb-1 text-sm text-slate-600">Income and expense</h3>
+                  <h3 className="mb-1 text-sm text-slate-600">Income and expense by month</h3>
                   <IncomeExpenseChart
                     months={trend.months}
                     bank={bank}
@@ -585,7 +599,7 @@ export default function DashboardPage() {
                   />
                 </div>
                 <div className="rounded border border-slate-200 bg-surface p-4">
-                  <h3 className="mb-1 text-sm text-slate-600">Balance</h3>
+                  <h3 className="mb-1 text-sm text-slate-600">Balance at the end of each month</h3>
                   <BalanceChart months={trend.months} />
                 </div>
               </div>
@@ -597,6 +611,16 @@ export default function DashboardPage() {
                 <RowsSkeleton rows={6} />
               </div>
             )}
+
+            <div className="mt-4">
+              <PeriodCards
+                level={3}
+                title={yearTitle}
+                totals={dash?.year}
+                byCategory={dash?.year_by_category}
+                filter={yearFilter}
+              />
+            </div>
           </section>
 
           <PeriodCards
@@ -620,13 +644,10 @@ export default function DashboardPage() {
             previous={dash?.previous_month}
             previousLabel={previousLabel}
             filter={monthFilter}
-          />
-
-          {dash && dash.top_expenses.length > 0 && (
-            <section>
-              <h3 className="mb-1 text-sm text-slate-600">
-                Largest expenses, {MONTHS_LONG[month - 1]} {year}
-              </h3>
+          >
+            {dash && dash.top_expenses.length > 0 && (
+            <div className="mt-3">
+              <h3 className="mb-1 text-sm text-slate-600">Largest expenses</h3>
               <ul className="divide-y divide-slate-100 rounded border border-slate-200 bg-surface text-sm">
                 {dash.top_expenses.map((t) => (
                   <li key={t.id} className="flex items-baseline justify-between gap-3 px-3 py-2">
@@ -641,15 +662,9 @@ export default function DashboardPage() {
                   </li>
                 ))}
               </ul>
-            </section>
-          )}
-
-          <PeriodCards
-            title={yearTitle}
-            totals={dash?.year}
-            byCategory={dash?.year_by_category}
-            filter={yearFilter}
-          />
+            </div>
+            )}
+          </PeriodCards>
           <p className="text-xs text-slate-500">
             Income and expense come from reconciled or accepted statements, without transfers between
             your own accounts. A transaction that appears in two overlapping statements counts once.

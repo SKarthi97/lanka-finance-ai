@@ -251,6 +251,8 @@ class CorrectionIn(BaseModel):
     category_id: int | None
     # Also learn a rule from this transaction and apply it to similar ones.
     create_rule: bool = False
+    # Only report how many similar transactions there are; change nothing.
+    preview: bool = False
 
 
 class CorrectionOut(BaseModel):
@@ -280,8 +282,21 @@ def correct_transaction(
     if body.create_rule and category is None:
         raise _error(422, "category_required", "Choose a category to create a rule.")
 
-    categorizer.set_manual_category(db, session.user_id, transaction, body.category_id)
     stem = categorizer.description_stem(transaction.original_description)
+    if body.preview:
+        return CorrectionOut(
+            transaction_id=transaction.id,
+            category_id=body.category_id,
+            category_name=category.name if category else None,
+            stem=stem,
+            similar_count=categorizer.count_similar(
+                db, session.user_id, stem, exclude_id=transaction.id
+            ),
+            rule_id=None,
+            changed=0,
+        )
+
+    categorizer.set_manual_category(db, session.user_id, transaction, body.category_id)
 
     rule_id, changed = None, 0
     if body.create_rule and category is not None:
