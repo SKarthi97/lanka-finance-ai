@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { ConfirmProvider } from "@/components/ConfirmDialog";
+import { LoadError } from "@/components/states";
 import {
   api,
   ApiError,
@@ -38,8 +40,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [uncategorised, setUncategorised] = useState(0);
   const [drawer, setDrawer] = useState(false); // sidebar open on small screens
   const [search, setSearch] = useState("");
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    setLoadFailed(false);
     api<Me>("/auth/me")
       .then((user) => {
         setCsrfToken(user.csrf_token);
@@ -51,8 +56,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       })
       .catch((err) => {
         if (err instanceof ApiError && err.status === 401) router.replace("/login");
+        else setLoadFailed(true); // backend down or unreachable: say so instead of spinning
       });
-  }, [router]);
+  }, [router, attempt]);
 
   // Close the drawer after navigating, and on Escape.
   useEffect(() => setDrawer(false), [pathname]);
@@ -76,13 +82,27 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   if (!me) {
-    return <p className="p-6 text-sm text-slate-500">Loading…</p>;
+    return (
+      <div className="mx-auto max-w-md p-6">
+        {loadFailed ? (
+          <LoadError
+            message="Cannot reach the server. Is the backend running?"
+            onRetry={() => setAttempt((n) => n + 1)}
+          />
+        ) : (
+          <p role="status" className="text-sm text-slate-500">
+            Loading…
+          </p>
+        )}
+      </div>
+    );
   }
 
   const aiUnavailable = ollama !== null && (!ollama.reachable || !ollama.model_present);
   const initials = me.username.slice(0, 2).toUpperCase();
 
   return (
+    <ConfirmProvider>
     <div className="min-h-screen">
       {/* Top bar */}
       <header className="fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-3 border-b border-slate-200 bg-chrome px-4">
@@ -209,5 +229,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">{children}</main>
       </div>
     </div>
+    </ConfirmProvider>
   );
 }

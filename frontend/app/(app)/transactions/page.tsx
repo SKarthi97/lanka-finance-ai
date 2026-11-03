@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useConfirm } from "@/components/ConfirmDialog";
 import { Pager } from "@/components/Pager";
+import { LoadError, RowsSkeleton } from "@/components/states";
 import {
   api,
   ApiError,
@@ -27,6 +29,7 @@ const PAGE_SIZES = [25, 50, 100];
 const select = "rounded border border-slate-300 px-2 py-2 text-sm bg-surface";
 
 export default function TransactionsPage() {
+  const confirm = useConfirm();
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [bank, setBank] = useState("");
@@ -115,15 +118,22 @@ export default function TransactionsPage() {
         json: { category_id: categoryId },
       });
       // Offer to learn from the correction when other transactions look the same.
-      if (
+      const learn =
         categoryId !== null &&
         result.similar_count > 0 &&
-        window.confirm(
-          `Use “${result.category_name}” for ${result.similar_count} other transaction${
-            result.similar_count === 1 ? "" : "s"
-          } like “${result.stem}”, and remember it for future statements?`,
-        )
-      ) {
+        (await confirm({
+          title: `Use “${result.category_name}” for similar transactions?`,
+          message: (
+            <>
+              {result.similar_count} other transaction{result.similar_count === 1 ? "" : "s"} look like{" "}
+              <span className="font-medium text-slate-900">“{result.stem}”</span>. Apply this category
+              to {result.similar_count === 1 ? "it" : "them"} and remember it for future statements?
+            </>
+          ),
+          confirmLabel: "Apply to all",
+          cancelLabel: "Only this one",
+        }));
+      if (learn) {
         await api<CorrectionResult>(`/transactions/${t.id}/category`, {
           method: "PUT",
           json: { category_id: categoryId, create_rule: true },
@@ -237,7 +247,16 @@ export default function TransactionsPage() {
         </label>
       </div>
 
-      {error && <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && (
+        <LoadError
+          message={error}
+          onRetry={() => {
+            setError(null);
+            setReloadKey((n) => n + 1);
+          }}
+        />
+      )}
+      {!data && !error && <RowsSkeleton rows={8} />}
 
       <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
         <span>{total === 0 ? "No matches" : `${from}–${to} of ${total}`}</span>
@@ -266,7 +285,7 @@ export default function TransactionsPage() {
       {data && data.items.length === 0 ? (
         <p className="text-sm text-slate-500">No transactions found.</p>
       ) : (
-        <div className="overflow-x-auto rounded border border-slate-200 bg-surface">
+        <div className={`overflow-x-auto rounded border border-slate-200 bg-surface ${data ? "" : "hidden"}`}>
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-200 text-slate-600">
               <tr>

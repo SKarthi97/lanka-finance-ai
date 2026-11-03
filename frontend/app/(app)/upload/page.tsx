@@ -2,6 +2,8 @@
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useConfirm } from "@/components/ConfirmDialog";
+import { LoadError, RowsSkeleton } from "@/components/states";
 import { StatementTracker } from "@/components/StatementTracker";
 import { api, ApiError, DocumentItem } from "@/lib/api";
 import { ACTIVE_STATUSES, STATUS_LABEL, STATUS_STYLE, explainError } from "@/lib/format";
@@ -15,6 +17,7 @@ function formatSize(bytes: number) {
 }
 
 export default function UploadPage() {
+  const confirm = useConfirm();
   const fileInput = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [bank, setBank] = useState("boc");
@@ -23,12 +26,14 @@ export default function UploadPage() {
   const [message, setMessage] = useState<{ kind: "error" | "ok" | "info"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [listState, setListState] = useState<"loading" | "ok" | "error">("loading");
 
   const loadDocuments = useCallback(async () => {
     try {
       setDocuments(await api<DocumentItem[]>("/documents"));
+      setListState("ok");
     } catch {
-      /* the layout redirects to /login on 401 */
+      setListState("error"); // a 401 is handled by the layout, which redirects to /login
     }
   }, []);
 
@@ -48,7 +53,18 @@ export default function UploadPage() {
   }, [hasActive, loadDocuments]);
 
   async function remove(doc: DocumentItem) {
-    if (!window.confirm(`Delete "${doc.original_filename}" and its data?`)) return;
+    const ok = await confirm({
+      title: "Delete this statement?",
+      message: (
+        <>
+          <span className="font-medium text-slate-900">{doc.original_filename}</span> and every
+          transaction read from it will be removed. This cannot be undone.
+        </>
+      ),
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (!ok) return;
     try {
       await api(`/documents/${doc.id}`, { method: "DELETE" });
       setMessage({ kind: "ok", text: `${doc.original_filename} deleted.` });
@@ -209,7 +225,11 @@ export default function UploadPage() {
 
       <div>
         <h2 className="mb-2 font-medium">Uploaded statements</h2>
-        {documents.length === 0 ? (
+        {listState === "loading" ? (
+          <RowsSkeleton />
+        ) : listState === "error" && documents.length === 0 ? (
+          <LoadError message="Could not load your statements." onRetry={loadDocuments} />
+        ) : documents.length === 0 ? (
           <p className="text-sm text-slate-500">Nothing uploaded yet.</p>
         ) : (
           <div className="overflow-x-auto rounded border border-slate-200 bg-surface">

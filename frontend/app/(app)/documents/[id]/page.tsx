@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useConfirm } from "@/components/ConfirmDialog";
+import { LoadError, RowsSkeleton } from "@/components/states";
 import {
   api,
   ApiError,
@@ -42,6 +44,7 @@ function Fact({ label, value }: { label: string; value: React.ReactNode }) {
 
 export default function DocumentPage() {
   const router = useRouter();
+  const confirm = useConfirm();
   const { id } = useParams<{ id: string }>();
 
   const [doc, setDoc] = useState<DocumentDetail | null>(null);
@@ -86,12 +89,14 @@ export default function DocumentPage() {
   }, [doc]);
 
   async function accept() {
-    if (
-      !window.confirm(
-        "Accept this statement even though it did not reconcile? Its transactions will count in totals.",
-      )
-    )
-      return;
+    const ok = await confirm({
+      title: "Accept this statement?",
+      message:
+        "It did not reconcile, so some figures may be wrong. Once accepted, its transactions count in your balances, income and expense.",
+      confirmLabel: "Accept anyway",
+      tone: "danger",
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       await api<DocumentItem>(`/documents/${id}/accept`, { method: "POST" });
@@ -119,14 +124,20 @@ export default function DocumentPage() {
   if (error && !doc) {
     return (
       <section className="space-y-3">
-        <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+        <LoadError
+          message={error}
+          onRetry={() => {
+            setError(null);
+            load();
+          }}
+        />
         <button onClick={() => router.push("/upload")} className="text-sm underline">
           Back to uploads
         </button>
       </section>
     );
   }
-  if (!doc) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (!doc) return <RowsSkeleton rows={8} />;
 
   const checks = Object.entries(doc.validation?.checks ?? {});
   const issues = doc.validation?.issues ?? [];

@@ -39,24 +39,11 @@ export function formatMoney(value: string | null | undefined): string {
 export function compareText(current: string, previous: string, label: string): string | null {
   const now = Number(current);
   const before = Number(previous);
-  if (!before) return null; // nothing to compare with
+  if (!before || !now) return null; // an empty side makes a percentage meaningless
   const change = ((now - before) / Math.abs(before)) * 100;
   if (Math.abs(change) < 0.5) return `same as ${label}`;
+  if (Math.abs(change) > 500) return `${change > 0 ? "far higher" : "far lower"} than ${label}`;
   return `${change > 0 ? "up" : "down"} ${Math.abs(change).toFixed(0)}% on ${label}`;
-}
-
-/** Zero debit/credit cells render empty so the active column stands out. */
-export function formatAmount(value: string): string {
-  return Number(value) === 0 ? "" : formatMoney(value);
-}
-
-export function formatDate(value: string | null | undefined): string {
-  if (!value) return "–";
-  return new Date(`${value}T00:00:00`).toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
 }
 
 // --- statuses -----------------------------------------------------------------
@@ -180,3 +167,17 @@ export const WINDOW_LABEL = (
     return `The statement's totals match only the last ${window.rows} of ${totalRows} rows (from page ${window.from_page}), so they appear to cover a recent period, not the whole statement.`;
   return "The statement's totals do not match any combination of rows, so they may cover something else.";
 };
+
+/** Zero debit/credit cells render empty so the active column stands out. */
+export function formatAmount(value: string): string {
+  return Number(value) === 0 ? "" : formatMoney(value);
+}
+
+export function formatDate(value: string | null | undefined): string {
+  if (!value) return "–";
+  return new Date(`${value}T00:00:00`).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}

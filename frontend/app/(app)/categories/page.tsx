@@ -1,6 +1,8 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { useConfirm } from "@/components/ConfirmDialog";
+import { LoadError, RowsSkeleton } from "@/components/states";
 import {
   api,
   ApiError,
@@ -53,9 +55,11 @@ export default function CategoriesPage() {
   const [queue, setQueue] = useState<ReviewQueue | null>(null);
   const [status, setStatus] = useState<CategorizationStatus | null>(null);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
+      setLoadError(null);
       const [c, r, q, s] = await Promise.all([
         api<CategoryItem[]>("/categories"),
         api<RuleItem[]>("/rules"),
@@ -67,7 +71,7 @@ export default function CategoriesPage() {
       setQueue(q);
       setStatus(s);
     } catch (err) {
-      setMessage({ kind: "error", text: err instanceof ApiError ? err.message : "Could not load categories." });
+      setLoadError(err instanceof ApiError ? err.message : "Could not load categories.");
     }
   }, []);
 
@@ -131,11 +135,14 @@ export default function CategoriesPage() {
         </p>
       )}
 
-      {tab === "review" && (
+      {loadError && <LoadError message={loadError} onRetry={load} />}
+
+      {!loadError && !queue && <RowsSkeleton />}
+      {queue && tab === "review" && (
         <ReviewTab queue={queue} status={status} categories={categories} run={run} />
       )}
-      {tab === "categories" && <CategoriesTab categories={categories} run={run} />}
-      {tab === "rules" && <RulesTab rules={rules} categories={categories} run={run} />}
+      {queue && tab === "categories" && <CategoriesTab categories={categories} run={run} />}
+      {queue && tab === "rules" && <RulesTab rules={rules} categories={categories} run={run} />}
     </section>
   );
 }
@@ -150,14 +157,12 @@ function ReviewTab({
   categories,
   run,
 }: {
-  queue: ReviewQueue | null;
+  queue: ReviewQueue;
   status: CategorizationStatus | null;
   categories: CategoryItem[];
   run: Run;
 }) {
   const [choice, setChoice] = useState<Record<string, string>>({});
-
-  if (!queue) return <p className="text-sm text-slate-500">Loading…</p>;
 
   return (
     <div className="space-y-4">
@@ -248,6 +253,7 @@ function ReviewTab({
 // --- categories -----------------------------------------------------------------------------
 
 function CategoriesTab({ categories, run }: { categories: CategoryItem[]; run: Run }) {
+  const confirm = useConfirm();
   const [name, setName] = useState("");
   const [kind, setKind] = useState<"expense" | "income" | "transfer">("expense");
 
@@ -308,13 +314,19 @@ function CategoriesTab({ categories, run }: { categories: CategoryItem[]; run: R
                   {!c.is_system && (
                     <button
                       className="text-xs text-red-700 hover:underline"
-                      onClick={() =>
-                        window.confirm(`Delete “${c.name}”?`) &&
+                      onClick={async () => {
+                        const ok = await confirm({
+                          title: `Delete “${c.name}”?`,
+                          message: "Only categories with no transactions can be deleted.",
+                          confirmLabel: "Delete",
+                          tone: "danger",
+                        });
+                        if (!ok) return;
                         run(async () => {
                           await api(`/categories/${c.id}`, { method: "DELETE" });
                           return `Deleted “${c.name}”.`;
-                        })
-                      }
+                        });
+                      }}
                     >
                       Delete
                     </button>
@@ -332,6 +344,7 @@ function CategoriesTab({ categories, run }: { categories: CategoryItem[]; run: R
 // --- rules -----------------------------------------------------------------------------------
 
 function RulesTab({ rules, categories, run }: { rules: RuleItem[]; categories: CategoryItem[]; run: Run }) {
+  const confirm = useConfirm();
   const [pattern, setPattern] = useState("");
   const [type, setType] = useState<"contains" | "word">("contains");
   const [category, setCategory] = useState("");
@@ -416,13 +429,20 @@ function RulesTab({ rules, categories, run }: { rules: RuleItem[]; categories: C
                   {r.origin !== "system" && (
                     <button
                       className="text-xs text-red-700 hover:underline"
-                      onClick={() =>
-                        window.confirm(`Delete the rule “${r.pattern}”?`) &&
+                      onClick={async () => {
+                        const ok = await confirm({
+                          title: `Delete the rule “${r.pattern}”?`,
+                          message:
+                            "Transactions it already categorised keep their category; new ones will no longer match it.",
+                          confirmLabel: "Delete rule",
+                          tone: "danger",
+                        });
+                        if (!ok) return;
                         run(async () => {
                           await api(`/rules/${r.id}`, { method: "DELETE" });
                           return "Rule deleted.";
-                        })
-                      }
+                        });
+                      }}
                     >
                       Delete
                     </button>

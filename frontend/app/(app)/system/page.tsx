@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { LoadError, Skeleton } from "@/components/states";
 import { api, HardwareReport, OllamaStatus } from "@/lib/api";
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -48,7 +49,18 @@ export default function SystemPage() {
   return (
     <section className="space-y-4">
       <h1 className="text-xl font-semibold">System</h1>
-      {error && <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && (
+        <LoadError
+          message={error}
+          onRetry={() => {
+            setError(null);
+            loadOllama(false);
+            api<HardwareReport>("/system/hardware")
+              .then(setHardware)
+              .catch(() => setError("Could not load hardware report."));
+          }}
+        />
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card title="Local AI (Ollama)">
@@ -74,7 +86,7 @@ export default function SystemPage() {
               </button>
             </>
           ) : (
-            <p className="text-sm text-slate-500">Loading…</p>
+            <div role="status" aria-label="Loading" className="space-y-2"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-4/5" /><Skeleton className="h-4 w-3/5" /></div>
           )}
         </Card>
 
@@ -100,7 +112,7 @@ export default function SystemPage() {
               </p>
             </>
           ) : (
-            <p className="text-sm text-slate-500">Loading…</p>
+            <div role="status" aria-label="Loading" className="space-y-2"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-4/5" /><Skeleton className="h-4 w-3/5" /></div>
           )}
         </Card>
       </div>

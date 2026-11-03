@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { CardSkeleton, LoadError, RowsSkeleton } from "@/components/states";
 import { BalanceChart, IncomeExpenseChart } from "@/components/TrendCharts";
 import { api, CategoryTotal, Dashboard, Tracker, Totals, Trend } from "@/lib/api";
 import {
@@ -108,9 +109,22 @@ function PeriodCards({
   action?: React.ReactNode; // shown at the right of the heading (the month picker)
 }) {
   const net = Number(totals?.net ?? 0);
-  const rate = totals && Number(totals.income) > 0 ? Math.round((net / Number(totals.income)) * 100) : null;
+  // Only compare with the previous month when both months have transactions: "down 100%" against
+  // an empty month says nothing.
+  const comparable = !!totals && !!previous && totals.transactions > 0 && previous.transactions > 0;
   const vs = (field: "income" | "expense") =>
-    totals && previous && previousLabel ? compareText(totals[field], previous[field], previousLabel) : null;
+    comparable && previousLabel ? compareText(totals![field], previous![field], previousLabel) : null;
+  const income = Number(totals?.income ?? 0);
+  // A percentage is only meaningful between 0 and 100: spending more than you earn, or earning
+  // nothing, is said in words instead of "-7204%".
+  const saving =
+    !totals || totals.transactions === 0
+      ? null
+      : income === 0
+        ? "no income"
+        : net < 0
+          ? "spent more than earned"
+          : `saved ${Math.round((net / income) * 100)}% of income`;
   const transfers = Number(totals?.transfers_in ?? 0) + Number(totals?.transfers_out ?? 0);
   return (
     <section>
@@ -127,7 +141,7 @@ function PeriodCards({
           tone={net < 0 ? "bad" : net > 0 ? "good" : undefined}
           hint={
             totals
-              ? `${totals.transactions} transactions${rate !== null ? ` · saved ${rate}% of income` : ""}`
+              ? `${totals.transactions} transactions${saving ? ` · ${saving}` : ""}`
               : undefined
           }
         />
@@ -166,6 +180,9 @@ export default function DashboardPage() {
 
   const [dash, setDash] = useState<Dashboard | null>(null);
   const [trend, setTrend] = useState<Trend | null>(null);
+  const [dashFailed, setDashFailed] = useState(false);
+  const [trendFailed, setTrendFailed] = useState(false);
+  const [reload, setReload] = useState(0); // bump to retry the dashboard requests
   const [tracker, setTracker] = useState<Tracker | null>(null);
 
   useEffect(() => {
@@ -175,17 +192,25 @@ export default function DashboardPage() {
   const bankParam = bank ? `&bank_code=${encodeURIComponent(bank)}` : "";
 
   useEffect(() => {
+    setDashFailed(false);
     api<Dashboard>(`/dashboard?year=${year}&month=${month}${bankParam}`)
       .then(setDash)
-      .catch(() => setDash(null));
-  }, [year, month, bankParam]);
+      .catch(() => {
+        setDash(null);
+        setDashFailed(true);
+      });
+  }, [year, month, bankParam, reload]);
 
   // The charts show January to December of the chosen year.
   useEffect(() => {
+    setTrendFailed(false);
     api<Trend>(`/dashboard/trend?year=${year}&month=12&months=12${bankParam}`)
       .then(setTrend)
-      .catch(() => setTrend(null));
-  }, [year, bankParam]);
+      .catch(() => {
+        setTrend(null);
+        setTrendFailed(true);
+      });
+  }, [year, bankParam, reload]);
 
   useEffect(() => {
     api<Tracker>(`/tracker?year=${year}`)
@@ -330,7 +355,30 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {dash && !dash.has_data ? (
+      {!dash ? (
+        dashFailed ? (
+          <LoadError
+            message="Could not load the dashboard."
+            onRetry={() => setReload((n) => n + 1)}
+          />
+        ) : (
+          <div className="space-y-6">
+            <div className="grid gap-3 md:grid-cols-[1fr_2fr]">
+              <CardSkeleton />
+              <CardSkeleton />
+            </div>
+            <div className="grid gap-3 lg:grid-cols-2">
+              <RowsSkeleton rows={6} />
+              <RowsSkeleton rows={6} />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <CardSkeleton />
+              <CardSkeleton />
+              <CardSkeleton />
+            </div>
+          </div>
+        )
+      ) : !dash.has_data ? (
         <p className="text-sm text-slate-600">
           No reconciled statements yet.{" "}
           <Link href="/upload" className="underline">
@@ -432,8 +480,13 @@ export default function DashboardPage() {
                   <BalanceChart months={trend.months} />
                 </div>
               </div>
+            ) : trendFailed ? (
+              <LoadError message="Could not load the charts." onRetry={() => setReload((n) => n + 1)} />
             ) : (
-              <p className="text-sm text-slate-500">Loading…</p>
+              <div className="grid gap-3 lg:grid-cols-2">
+                <RowsSkeleton rows={6} />
+                <RowsSkeleton rows={6} />
+              </div>
             )}
           </section>
 
