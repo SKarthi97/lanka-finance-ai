@@ -349,3 +349,85 @@ def test_covered_months_rule():
     assert _covered_months(date(2020, 12, 28), date(2022, 6, 30)) == (
         {(2021, m) for m in range(1, 13)} | {(2022, m) for m in range(1, 7)}
     )
+
+
+# --- dashboard: comparison, top expenses, attention, bank filter, trend ------------------
+
+
+def test_dashboard_previous_month_top_expenses_and_attention(
+    logged_in, session_factory, test_settings
+):
+    client, csrf = logged_in
+    run_pipeline(client, csrf, session_factory, test_settings, september(account=FAKE_ACCOUNT))
+    run_pipeline(client, csrf, session_factory, test_settings, october(account=FAKE_ACCOUNT))
+
+    body = client.get("/api/dashboard?year=2022&month=10").json()
+    assert Decimal(body["month"]["expense"]) == Decimal("50.00")
+    assert Decimal(body["previous_month"]["income"]) == Decimal("2500.00")
+    assert Decimal(body["previous_month"]["expense"]) == Decimal("500.00")
+
+    september_body = client.get("/api/dashboard?year=2022&month=9").json()
+    (top,) = [t for t in september_body["top_expenses"]]
+    assert top["bank_code"] == "boc"
+    assert Decimal(top["amount"]) == Decimal("500.00")  # credits are never "expenses"
+    assert body["uncategorised_total"] >= 0
+    assert body["ai_unsure"] == 0
+    assert body["banks"] == [{"code": "boc", "name": "Bank of Ceylon"}]
+
+
+def test_dashboard_bank_filter(logged_in, session_factory, test_settings):
+    client, csrf = logged_in
+    run_pipeline(client, csrf, session_factory, test_settings, september())
+
+    boc = client.get("/api/dashboard?year=2022&month=9&bank_code=boc").json()
+    assert Decimal(boc["month"]["income"]) == Decimal("2500.00")
+
+    other = client.get("/api/dashboard?year=2022&month=9&bank_code=hnb").json()
+    assert other["balances"] == []
+    assert Decimal(other["month"]["income"]) == 0
+    assert other["top_expenses"] == []
+
+
+def test_trend_has_income_expense_and_month_end_balance(
+    logged_in, session_factory, test_settings
+):
+    client, csrf = logged_in
+    run_pipeline(client, csrf, session_factory, test_settings, september(account=FAKE_ACCOUNT))
+    run_pipeline(client, csrf, session_factory, test_settings, october(account=FAKE_ACCOUNT))
+
+    body = client.get("/api/dashboard/trend?year=2022&month=12&months=4").json()
+    months = {(m["year"], m["month"]): m for m in body["months"]}
+    assert list(months) == [(2022, 9), (2022, 10), (2022, 11), (2022, 12)]
+
+    assert Decimal(months[(2022, 9)]["income"]) == Decimal("2500.00")
+    assert Decimal(months[(2022, 9)]["expense"]) == Decimal("500.00")
+    assert Decimal(months[(2022, 9)]["balance"]) == Decimal("3000.00")
+    assert Decimal(months[(2022, 10)]["expense"]) == Decimal("50.00")
+    assert Decimal(months[(2022, 10)]["balance"]) == Decimal("2950.00")
+    # No data after October: income/expense are zero and the balance is unknown, not flat.
+    assert Decimal(months[(2022, 11)]["income"]) == 0
+    assert months[(2022, 11)]["balance"] is None
+    assert months[(2022, 12)]["balance"] is None
+
+
+def test_trend_carries_the_balance_in_from_before_the_window(
+    logged_in, session_factory, test_settings
+):
+    client, csrf = logged_in
+    run_pipeline(client, csrf, session_factory, test_settings, september(account=FAKE_ACCOUNT))
+    run_pipeline(client, csrf, session_factory, test_settings, october(account=FAKE_ACCOUNT))
+
+    body = client.get("/api/dashboard/trend?year=2022&month=10&months=2").json()
+    assert [m["month"] for m in body["months"]] == [9, 10]
+    # Window of one month, ending in October: September's balance carries in.
+    one = client.get("/api/dashboard/trend?year=2022&month=10&months=2").json()["months"][0]
+    assert Decimal(one["balance"]) == Decimal("3000.00")
+
+
+def test_trend_with_no_data_and_bad_window(logged_in):
+    client, _ = logged_in
+    body = client.get("/api/dashboard/trend?year=2026&month=11&months=3").json()
+    assert len(body["months"]) == 3
+    assert all(m["balance"] is None and Decimal(m["income"]) == 0 for m in body["months"])
+    assert client.get("/api/dashboard/trend?months=1").status_code == 422
+    assert client.get("/api/dashboard/trend?months=61").status_code == 422

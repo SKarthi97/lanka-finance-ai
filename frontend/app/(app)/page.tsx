@@ -2,8 +2,18 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { api, CategoryTotal, Dashboard, Tracker, Totals } from "@/lib/api";
-import { MONTHS, MONTHS_LONG, NO_ACCOUNT_HINT, formatDate, formatMoney } from "@/lib/format";
+import { BalanceChart, IncomeExpenseChart } from "@/components/TrendCharts";
+import { api, CategoryTotal, Dashboard, Tracker, Totals, Trend } from "@/lib/api";
+import {
+  MONTHS,
+  MONTHS_LONG,
+  NO_ACCOUNT_HINT,
+  compareText,
+  formatDate,
+  formatMoney,
+  loadAmountsHidden,
+  setAmountsHidden,
+} from "@/lib/format";
 
 const select = "rounded border border-slate-300 bg-white px-2 py-1 text-sm";
 
@@ -28,7 +38,7 @@ function Card({
   );
 }
 
-function CategoryBars({ items }: { items: CategoryTotal[] }) {
+function CategoryBars({ items, filter }: { items: CategoryTotal[]; filter: string }) {
   // Spending by category, transfers excluded. The biggest few, then the rest.
   const spending = items
     .filter((c) => c.kind !== "transfer" && Number(c.expense) > 0)
@@ -51,12 +61,16 @@ function CategoryBars({ items }: { items: CategoryTotal[] }) {
           <li key={c.category_id ?? "none"}>
             <div className="flex justify-between gap-3">
               <span className={uncategorised ? "text-amber-700" : ""}>
-                {uncategorised ? (
-                  <Link href="/categories" className="underline">
+                {c.category_id === -1 ? (
+                  c.name
+                ) : (
+                  <Link
+                    href={`/transactions?${uncategorised ? "uncategorised=true" : `category_id=${c.category_id}`}${filter}`}
+                    className="underline decoration-slate-300 hover:decoration-slate-600"
+                    title="Show these transactions"
+                  >
                     {c.name}
                   </Link>
-                ) : (
-                  c.name
                 )}
               </span>
               <span className="tabular-nums text-slate-600">
@@ -80,24 +94,37 @@ function PeriodCards({
   title,
   totals,
   byCategory,
+  previous,
+  previousLabel,
+  filter,
 }: {
   title: string;
   totals: Totals | undefined;
   byCategory: CategoryTotal[] | undefined;
+  previous?: Totals;
+  previousLabel?: string;
+  filter: string; // query string for the transactions drill-down, e.g. "&year=2026&month=10"
 }) {
   const net = Number(totals?.net ?? 0);
+  const rate = totals && Number(totals.income) > 0 ? Math.round((net / Number(totals.income)) * 100) : null;
+  const vs = (field: "income" | "expense") =>
+    totals && previous && previousLabel ? compareText(totals[field], previous[field], previousLabel) : null;
   const transfers = Number(totals?.transfers_in ?? 0) + Number(totals?.transfers_out ?? 0);
   return (
     <section>
       <h2 className="mb-2 font-medium">{title}</h2>
       <div className="grid gap-3 sm:grid-cols-3">
-        <Card label="Income" value={formatMoney(totals?.income)} tone="good" />
-        <Card label="Expense" value={formatMoney(totals?.expense)} tone="bad" />
+        <Card label="Income" value={formatMoney(totals?.income)} tone="good" hint={vs("income") ?? undefined} />
+        <Card label="Expense" value={formatMoney(totals?.expense)} tone="bad" hint={vs("expense") ?? undefined} />
         <Card
           label="Net"
           value={formatMoney(totals?.net)}
           tone={net < 0 ? "bad" : net > 0 ? "good" : undefined}
-          hint={totals ? `${totals.transactions} transactions` : undefined}
+          hint={
+            totals
+              ? `${totals.transactions} transactions${rate !== null ? ` · saved ${rate}% of income` : ""}`
+              : undefined
+          }
         />
       </div>
 
@@ -119,7 +146,7 @@ function PeriodCards({
 
       <div className="mt-3">
         <h3 className="mb-1 text-sm text-slate-600">Spending by category</h3>
-        {byCategory && <CategoryBars items={byCategory} />}
+        {byCategory && <CategoryBars items={byCategory} filter={filter} />}
       </div>
     </section>
   );
@@ -130,15 +157,27 @@ export default function DashboardPage() {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [trackerYear, setTrackerYear] = useState(now.getFullYear());
+  const [bank, setBank] = useState("");
+  const [hidden, setHidden] = useState(false);
 
   const [dash, setDash] = useState<Dashboard | null>(null);
+  const [trend, setTrend] = useState<Trend | null>(null);
   const [tracker, setTracker] = useState<Tracker | null>(null);
 
   useEffect(() => {
-    api<Dashboard>(`/dashboard?year=${year}&month=${month}`)
+    setHidden(loadAmountsHidden());
+  }, []);
+
+  const bankParam = bank ? `&bank_code=${encodeURIComponent(bank)}` : "";
+
+  useEffect(() => {
+    api<Dashboard>(`/dashboard?year=${year}&month=${month}${bankParam}`)
       .then(setDash)
       .catch(() => setDash(null));
-  }, [year, month]);
+    api<Trend>(`/dashboard/trend?year=${year}&month=${month}&months=12${bankParam}`)
+      .then(setTrend)
+      .catch(() => setTrend(null));
+  }, [year, month, bankParam]);
 
   useEffect(() => {
     api<Tracker>(`/tracker?year=${trackerYear}`)
@@ -150,7 +189,21 @@ export default function DashboardPage() {
   const monthTitle = isNow ? "This month" : `${MONTHS_LONG[month - 1]} ${year}`;
   const yearTitle = year === now.getFullYear() ? "This year" : String(year);
 
+  const prevIndex = year * 12 + (month - 1) - 1;
+  const previousLabel = MONTHS[prevIndex % 12];
+
   const emptyPeriod = dash?.has_data && dash.month.transactions === 0 && dash.year.transactions === 0;
+
+  function shift(delta: number) {
+    const index = year * 12 + (month - 1) + delta;
+    setYear(Math.floor(index / 12));
+    setMonth((index % 12) + 1);
+  }
+
+  function toggleHidden() {
+    setAmountsHidden(!hidden);
+    setHidden(!hidden);
+  }
 
   function jumpToLatest() {
     if (!dash?.as_of) return;
@@ -166,12 +219,97 @@ export default function DashboardPage() {
     new Set([...(dash?.years ?? []), ...(tracker?.years ?? []), now.getFullYear(), year]),
   ).sort((a, b) => a - b);
 
+  // --- things that need you ---------------------------------------------------------------
+  const staleDays = dash?.as_of
+    ? Math.floor((now.getTime() - new Date(`${dash.as_of}T00:00:00`).getTime()) / 86_400_000)
+    : null;
+  const stale = staleDays !== null && staleDays > 45;
+
+  // Months without a statement between a row's first and last statement (this tracker year).
+  let missingMonths = 0;
+  for (const row of tracker?.rows ?? []) {
+    const have = Object.keys(row.cells).map(Number);
+    if (have.length === 0) continue;
+    const lo = Math.min(...have);
+    const hi = Math.max(...have);
+    for (let m = lo; m <= hi; m++) if (!row.cells[String(m)]) missingMonths++;
+  }
+
+  const attention: { key: string; text: React.ReactNode }[] = [];
+  if (dash && dash.needs_review > 0)
+    attention.push({
+      key: "review",
+      text: (
+        <>
+          {dash.needs_review} statement{dash.needs_review === 1 ? "" : "s"} did not reconcile and{" "}
+          {dash.needs_review === 1 ? "is" : "are"} excluded from every figure.{" "}
+          <Link href="/upload" className="underline">
+            Review
+          </Link>
+        </>
+      ),
+    });
+  if (dash && dash.uncategorised_total > 0)
+    attention.push({
+      key: "uncat",
+      text: (
+        <>
+          {dash.uncategorised_total} transaction{dash.uncategorised_total === 1 ? "" : "s"} uncategorised
+          {dash.ai_unsure > 0 ? `, ${dash.ai_unsure} with an unsure AI suggestion` : ""}.{" "}
+          <Link href="/categories" className="underline">
+            Categorise
+          </Link>
+        </>
+      ),
+    });
+  if (stale)
+    attention.push({
+      key: "stale",
+      text: (
+        <>
+          Your latest statement ends {formatDate(dash?.as_of)}, {staleDays} days ago. Balances may be
+          out of date.{" "}
+          <Link href="/upload" className="underline">
+            Upload a newer statement
+          </Link>
+        </>
+      ),
+    });
+  if (missingMonths > 0)
+    attention.push({
+      key: "gaps",
+      text: (
+        <>
+          {missingMonths} month{missingMonths === 1 ? "" : "s"} without a statement in {tracker?.year},
+          between statements you have.{" "}
+          <a href="#tracker" className="underline">
+            See the tracker
+          </a>
+        </>
+      ),
+    });
+
+  const monthFilter = `${bankParam}&year=${year}&month=${month}`;
+  const yearFilter = `${bankParam}&year=${year}`;
+
   return (
     <section className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">Dashboard</h1>
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-slate-500">Period</span>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          {(dash?.banks.length ?? 0) > 1 && (
+            <select aria-label="Bank" value={bank} onChange={(e) => setBank(e.target.value)} className={select}>
+              <option value="">All banks</option>
+              {dash?.banks.map((b) => (
+                <option key={b.code} value={b.code}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          )}
+          <button onClick={() => shift(-1)} aria-label="Previous month" className={`${select} px-3`}>
+            ←
+          </button>
           <select aria-label="Month" value={month} onChange={(e) => setMonth(Number(e.target.value))} className={select}>
             {MONTHS_LONG.map((name, index) => (
               <option key={name} value={index + 1}>
@@ -186,16 +324,33 @@ export default function DashboardPage() {
               </option>
             ))}
           </select>
+          <button
+            onClick={() => shift(1)}
+            disabled={isNow}
+            aria-label="Next month"
+            className={`${select} px-3 disabled:opacity-40`}
+          >
+            →
+          </button>
+          <button
+            onClick={toggleHidden}
+            aria-pressed={hidden}
+            className={select}
+            title="Hide every amount, for screen sharing"
+          >
+            {hidden ? "Show amounts" : "Hide amounts"}
+          </button>
         </div>
       </div>
 
-      {dash && dash.needs_review > 0 && (
-        <div role="status" className="rounded bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          {dash.needs_review} statement{dash.needs_review === 1 ? "" : "s"} did not reconcile and{" "}
-          {dash.needs_review === 1 ? "is" : "are"} excluded from every figure below.{" "}
-          <Link href="/upload" className="underline">
-            Review
-          </Link>
+      {attention.length > 0 && (
+        <div role="status" className="space-y-1 rounded bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <div className="font-medium">Needs your attention</div>
+          <ul className="list-disc space-y-0.5 pl-5">
+            {attention.map((a) => (
+              <li key={a.key}>{a.text}</li>
+            ))}
+          </ul>
         </div>
       )}
 
@@ -216,7 +371,11 @@ export default function DashboardPage() {
               <Card
                 label="Total across accounts (LKR)"
                 value={formatMoney(dash?.total_balance)}
-                hint={dash?.as_of ? `As of the latest statement, ${formatDate(dash.as_of)}` : undefined}
+                hint={
+                  dash?.as_of
+                    ? `As of the latest statement, ${formatDate(dash.as_of)}${staleDays !== null ? ` (${staleDays} days ago)` : ""}`
+                    : undefined
+                }
               />
               <div className="overflow-x-auto rounded border border-slate-200 bg-white">
                 <table className="w-full text-left text-sm">
@@ -262,8 +421,69 @@ export default function DashboardPage() {
             </p>
           )}
 
-          <PeriodCards title={monthTitle} totals={dash?.month} byCategory={dash?.month_by_category} />
-          <PeriodCards title={yearTitle} totals={dash?.year} byCategory={dash?.year_by_category} />
+          <section>
+            <h2 className="mb-2 font-medium">Last 12 months</h2>
+            {trend ? (
+              <div className="grid gap-3 lg:grid-cols-2">
+                <div className="rounded border border-slate-200 bg-white p-4">
+                  <h3 className="mb-1 text-sm text-slate-600">Income and expense</h3>
+                  <IncomeExpenseChart
+                    months={trend.months}
+                    bank={bank}
+                    selected={{ year, month }}
+                    onPick={(y, m) => {
+                      setYear(y);
+                      setMonth(m);
+                    }}
+                  />
+                </div>
+                <div className="rounded border border-slate-200 bg-white p-4">
+                  <h3 className="mb-1 text-sm text-slate-600">Balance</h3>
+                  <BalanceChart months={trend.months} />
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500">Loading…</p>
+            )}
+          </section>
+
+          <PeriodCards
+            title={monthTitle}
+            totals={dash?.month}
+            byCategory={dash?.month_by_category}
+            previous={dash?.previous_month}
+            previousLabel={previousLabel}
+            filter={monthFilter}
+          />
+
+          {dash && dash.top_expenses.length > 0 && (
+            <section>
+              <h3 className="mb-1 text-sm text-slate-600">
+                Largest expenses, {MONTHS_LONG[month - 1]} {year}
+              </h3>
+              <ul className="divide-y divide-slate-100 rounded border border-slate-200 bg-white text-sm">
+                {dash.top_expenses.map((t) => (
+                  <li key={t.id} className="flex items-baseline justify-between gap-3 px-3 py-2">
+                    <span className="min-w-0">
+                      <span className="text-xs text-slate-500">{formatDate(t.transaction_date)}</span>{" "}
+                      <span className="break-words">{t.description}</span>{" "}
+                      <span className="text-xs text-slate-500">
+                        {t.category_name ?? <span className="text-amber-700">uncategorised</span>}
+                      </span>
+                    </span>
+                    <span className="shrink-0 tabular-nums">{formatMoney(t.amount)}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          <PeriodCards
+            title={yearTitle}
+            totals={dash?.year}
+            byCategory={dash?.year_by_category}
+            filter={yearFilter}
+          />
           <p className="text-xs text-slate-500">
             Income and expense come from reconciled or accepted statements, without transfers between
             your own accounts. A transaction that appears in two overlapping statements counts once.
@@ -272,7 +492,7 @@ export default function DashboardPage() {
       )}
 
       {/* Statement tracker */}
-      <section>
+      <section id="tracker">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="font-medium">Statement tracker</h2>
           <select

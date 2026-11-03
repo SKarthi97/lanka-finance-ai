@@ -191,6 +191,26 @@ export type CategoryTotal = {
   transactions: number;
 };
 
+export type TopExpense = {
+  id: number;
+  transaction_date: string;
+  description: string;
+  amount: string;
+  category_name: string | null;
+  bank_code: string | null;
+};
+
+export type TrendMonth = {
+  year: number;
+  month: number;
+  income: string;
+  expense: string;
+  net: string;
+  balance: string | null;
+};
+
+export type Trend = { months: TrendMonth[] };
+
 export type Dashboard = {
   balances: {
     bank_code: string | null;
@@ -202,6 +222,11 @@ export type Dashboard = {
   total_balance: string;
   as_of: string | null;
   month: Totals;
+  previous_month: Totals;
+  top_expenses: TopExpense[];
+  uncategorised_total: number;
+  ai_unsure: number;
+  banks: Bank[];
   year: Totals;
   month_by_category: CategoryTotal[];
   year_by_category: CategoryTotal[];

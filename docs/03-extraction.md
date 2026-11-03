@@ -132,6 +132,19 @@ the output before sharing it.
 - **Current balance:** per bank/account, the closing balance of its latest reconciled or
   accepted statement, with the statement date ("as of"); the total is their sum. It is the
   balance at the last statement, not a live balance.
+- **Trend (`GET /api/dashboard/trend?year=&month=&months=12&bank_code=`):** income, expense
+  (transfers excluded) and the month-end total balance for each of the last N months. The
+  balance is, per account, the running balance of its last transaction up to the month's end,
+  summed; it is empty after the latest data rather than drawn flat. The dashboard shows it as
+  two charts; clicking a month selects it.
+- **Comparison and attention:** the month cards say how income and expense moved against the
+  previous month and the share of income saved. "Needs your attention" lists unreconciled
+  statements, uncategorised transactions (and unsure AI suggestions), a stale latest statement
+  (over 45 days) and months missing between statements in the tracker.
+- **Drill-down:** category names open Transactions with the category, period and bank already
+  filtered. The dashboard can be limited to one bank, and "Hide amounts" masks every figure
+  for screen sharing (remembered in the browser only).
+- **Largest expenses:** the top five debits of the month, transfers excluded.
 - **Income / expense:** credits / debits of reconciled or accepted statements whose
   transaction date falls in the chosen month and year (default: the browser's current
   month, so the server's timezone never decides). Until categories exist (Phase 4) these

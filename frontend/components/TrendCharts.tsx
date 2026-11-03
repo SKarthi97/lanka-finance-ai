@@ -1,0 +1,167 @@
+"use client";
+
+import Link from "next/link";
+import { TrendMonth } from "@/lib/api";
+import { MONTHS, formatMoney } from "@/lib/format";
+
+// Chart values are for drawing only (never shown as figures without formatMoney, never summed
+// into totals); the amounts themselves stay exact decimal strings from the API.
+const W = 720;
+const H = 200;
+const PAD = { top: 12, right: 8, bottom: 24, left: 8 };
+
+const INCOME = "#2563eb"; // blue
+const EXPENSE = "#ea580c"; // orange: distinguishable from blue without relying on red/green
+const BALANCE = "#334155";
+
+function compact(n: number): string {
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
+  return n.toFixed(0);
+}
+
+function monthHref(m: TrendMonth, bank: string): string {
+  const params = new URLSearchParams({ year: String(m.year), month: String(m.month) });
+  if (bank) params.set("bank_code", bank);
+  return `/transactions?${params}`;
+}
+
+export function IncomeExpenseChart({
+  months,
+  bank,
+  onPick,
+  selected,
+}: {
+  months: TrendMonth[];
+  bank: string;
+  onPick: (year: number, month: number) => void;
+  selected: { year: number; month: number };
+}) {
+  const max = Math.max(1, ...months.flatMap((m) => [Number(m.income), Number(m.expense)]));
+  const plotH = H - PAD.top - PAD.bottom;
+  const slot = (W - PAD.left - PAD.right) / months.length;
+  const barW = Math.min(18, slot / 2.6);
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Income and expense by month">
+        <line x1={PAD.left} x2={W - PAD.right} y1={H - PAD.bottom} y2={H - PAD.bottom} stroke="#cbd5e1" />
+        {months.map((m, i) => {
+          const x = PAD.left + i * slot + slot / 2;
+          const inc = (Number(m.income) / max) * plotH;
+          const exp = (Number(m.expense) / max) * plotH;
+          const active = m.year === selected.year && m.month === selected.month;
+          return (
+            <g key={`${m.year}-${m.month}`}>
+              {active && (
+                <rect x={x - slot / 2 + 2} y={PAD.top - 6} width={slot - 4} height={plotH + 6} fill="#f1f5f9" />
+              )}
+              <rect x={x - barW - 1} y={H - PAD.bottom - inc} width={barW} height={Math.max(inc, 0)} fill={INCOME} rx="2">
+                <title>{`${MONTHS[m.month - 1]} ${m.year} income ${formatMoney(m.income)}`}</title>
+              </rect>
+              <rect x={x + 1} y={H - PAD.bottom - exp} width={barW} height={Math.max(exp, 0)} fill={EXPENSE} rx="2">
+                <title>{`${MONTHS[m.month - 1]} ${m.year} expense ${formatMoney(m.expense)}`}</title>
+              </rect>
+              {/* Whole slot is a button: pick the month; the label below opens its transactions. */}
+              <rect
+                x={x - slot / 2}
+                y={PAD.top - 6}
+                width={slot}
+                height={plotH + 6}
+                fill="transparent"
+                className="cursor-pointer"
+                onClick={() => onPick(m.year, m.month)}
+              >
+                <title>{`Show ${MONTHS[m.month - 1]} ${m.year}`}</title>
+              </rect>
+              <text x={x} y={H - 8} textAnchor="middle" fontSize="11" fill={active ? "#0f172a" : "#64748b"} fontWeight={active ? 600 : 400}>
+                {MONTHS[m.month - 1]}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      <div className="mt-1 flex flex-wrap items-center gap-4 text-xs text-slate-600">
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-2 w-3 rounded-sm" style={{ background: INCOME }} /> Income
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-2 w-3 rounded-sm" style={{ background: EXPENSE }} /> Expense
+        </span>
+        <span className="text-slate-400">Peak {compact(max)} · click a month to select it</span>
+        <Link
+          href={monthHref(
+            months.find((m) => m.year === selected.year && m.month === selected.month) ?? months[months.length - 1],
+            bank,
+          )}
+          className="ml-auto underline"
+        >
+          Transactions for {MONTHS[selected.month - 1]} {selected.year}
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+export function BalanceChart({ months }: { months: TrendMonth[] }) {
+  const points = months.map((m) => (m.balance === null ? null : Number(m.balance)));
+  const known = points.filter((p): p is number => p !== null);
+  if (known.length < 2) {
+    return <p className="text-sm text-slate-500">Not enough months of data for a balance line yet.</p>;
+  }
+  const min = Math.min(...known);
+  const max = Math.max(...known);
+  const span = max - min || 1;
+  const plotH = H - PAD.top - PAD.bottom;
+  const slot = (W - PAD.left - PAD.right) / months.length;
+  const xy = (i: number, v: number) => [
+    PAD.left + i * slot + slot / 2,
+    PAD.top + (1 - (v - min) / span) * plotH,
+  ];
+
+  // Break the line where the balance is unknown rather than drawing across the gap.
+  const segments: string[][] = [];
+  let current: string[] = [];
+  points.forEach((p, i) => {
+    if (p === null) {
+      if (current.length) segments.push(current);
+      current = [];
+    } else {
+      const [x, y] = xy(i, p);
+      current.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+    }
+  });
+  if (current.length) segments.push(current);
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Total balance at the end of each month">
+        <line x1={PAD.left} x2={W - PAD.right} y1={H - PAD.bottom} y2={H - PAD.bottom} stroke="#cbd5e1" />
+        {segments.map((seg, i) => (
+          <polyline key={i} points={seg.join(" ")} fill="none" stroke={BALANCE} strokeWidth="2" />
+        ))}
+        {months.map((m, i) => {
+          const p = points[i];
+          const [x] = xy(i, 0);
+          return (
+            <g key={`${m.year}-${m.month}`}>
+              {p !== null && (
+                <circle cx={xy(i, p)[0]} cy={xy(i, p)[1]} r="3" fill={BALANCE}>
+                  <title>{`${MONTHS[m.month - 1]} ${m.year} balance ${formatMoney(m.balance)}`}</title>
+                </circle>
+              )}
+              <text x={x} y={H - 8} textAnchor="middle" fontSize="11" fill="#64748b">
+                {MONTHS[m.month - 1]}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      <div className="mt-1 text-xs text-slate-500">
+        Month-end balance across accounts, from {compact(min)} to {compact(max)}. A gap means no data
+        after the latest statement.
+      </div>
+    </div>
+  );
+}

@@ -45,6 +45,17 @@ export default function TransactionsPage() {
   const [data, setData] = useState<TransactionList | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Links from the dashboard arrive with filters in the address (?year=&month=&category_id=...).
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    if (p.get("bank_code")) setBank(p.get("bank_code")!);
+    if (p.get("year")) setYear(p.get("year")!);
+    if (p.get("year") && p.get("month")) setMonth(p.get("month")!);
+    if (p.get("uncategorised")) setCategoryFilter("none");
+    else if (p.get("category_id")) setCategoryFilter(p.get("category_id")!);
+    if (p.get("q")) setSearch(p.get("q")!);
+  }, []);
+
   useEffect(() => {
     api<Bank[]>("/banks").then(setBanks).catch(() => undefined);
     api<CategoryItem[]>("/categories").then(setCategories).catch(() => undefined);

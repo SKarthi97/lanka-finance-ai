@@ -3,10 +3,46 @@ const money = new Intl.NumberFormat("en-LK", {
   maximumFractionDigits: 2,
 });
 
+// Privacy toggle: hides every amount (for screen sharing). Remembered in this browser only.
+let amountsHidden = false;
+
+export function areAmountsHidden(): boolean {
+  return amountsHidden;
+}
+
+export function loadAmountsHidden(): boolean {
+  try {
+    amountsHidden = window.localStorage.getItem("hideAmounts") === "1";
+  } catch {
+    amountsHidden = false;
+  }
+  return amountsHidden;
+}
+
+export function setAmountsHidden(hidden: boolean) {
+  amountsHidden = hidden;
+  try {
+    window.localStorage.setItem("hideAmounts", hidden ? "1" : "0");
+  } catch {
+    /* private window: the toggle still works for this visit */
+  }
+}
+
 /** Display only. Amounts arrive as exact decimal strings and are never summed here. */
 export function formatMoney(value: string | null | undefined): string {
   if (value === null || value === undefined || value === "") return "–";
+  if (amountsHidden) return "••••••";
   return money.format(Number(value));
+}
+
+/** Month-over-month change as text, e.g. "up 12% on Oct". Display only. */
+export function compareText(current: string, previous: string, label: string): string | null {
+  const now = Number(current);
+  const before = Number(previous);
+  if (!before) return null; // nothing to compare with
+  const change = ((now - before) / Math.abs(before)) * 100;
+  if (Math.abs(change) < 0.5) return `same as ${label}`;
+  return `${change > 0 ? "up" : "down"} ${Math.abs(change).toFixed(0)}% on ${label}`;
 }
 
 /** Zero debit/credit cells render empty so the active column stands out. */
