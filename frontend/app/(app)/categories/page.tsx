@@ -222,6 +222,16 @@ function ReviewTab({
                   <td className="px-3 py-2">
                     <div className="font-medium">{g.stem}</div>
                     {g.example !== g.stem && <div className="text-xs text-slate-500">e.g. {g.example}</div>}
+                    {g.hint_category_id !== null && !choice[g.stem] && (
+                      <button
+                        onClick={() => setChoice({ ...choice, [g.stem]: String(g.hint_category_id) })}
+                        title="The AI was not confident enough to apply this, so it only suggests it"
+                        className="mt-1 rounded bg-violet-100 px-2 py-0.5 text-xs text-violet-800 hover:opacity-90"
+                      >
+                        AI hunch: {g.hint_category_name}
+                        {g.hint_confidence !== null && ` (${Math.round(g.hint_confidence * 100)}%)`} · use it
+                      </button>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{g.count}</td>
                   <td className="px-3 py-2">
@@ -277,23 +287,29 @@ function SuggestionsTab({
 
   if (!suggestions) return <RowsSkeleton />;
 
-  async function acceptAll() {
+  const confidentOnly = suggestions.groups.filter((g) => g.confidence >= suggestions.confident_threshold);
+
+  async function acceptAll(only: SuggestionGroup[]) {
+    const everything = only.length === suggestions!.groups.length;
+    const rows = only.reduce((n, g) => n + g.count, 0);
     const ok = await confirm({
-      title: `Accept all ${suggestions!.groups.length} suggestions?`,
-      message: `Every AI suggestion (${suggestions!.total} transaction${suggestions!.total === 1 ? "" : "s"}) becomes your choice and is remembered as a rule for future statements.`,
-      confirmLabel: "Accept all",
+      title: everything
+        ? `Accept all ${only.length} suggestions?`
+        : `Accept the ${only.length} confident suggestions?`,
+      message: `${everything ? "Every" : "Each"} AI suggestion shown (${rows} transaction${rows === 1 ? "" : "s"}) becomes your choice and is remembered as a rule for future statements.${everything ? "" : " Less certain ones stay for you to check."}`,
+      confirmLabel: "Accept",
     });
     if (!ok) return;
     run(async () => {
       let changed = 0;
-      for (const g of suggestions!.groups) {
+      for (const g of only) {
         const result = await api<{ changed: number }>("/categorization/suggestions/accept", {
           method: "POST",
           json: { stem: g.stem, category_id: g.category_id },
         });
         changed += result.changed;
       }
-      return `Accepted ${suggestions!.groups.length} suggestions (${changed} transactions) and saved them as rules.`;
+      return `Accepted ${only.length} suggestions (${changed} transactions) and saved them as rules.`;
     });
   }
 
@@ -311,8 +327,16 @@ function SuggestionsTab({
         </p>
       ) : (
         <>
-          <div className="flex justify-end">
-            <button className={primary} onClick={acceptAll}>
+          <div className="flex flex-wrap justify-end gap-2">
+            {confidentOnly.length > 0 && confidentOnly.length < suggestions.groups.length && (
+              <button className={primary} onClick={() => acceptAll(confidentOnly)}>
+                Accept confident ({confidentOnly.length}, {Math.round(suggestions.confident_threshold * 100)}%+)
+              </button>
+            )}
+            <button
+              className={confidentOnly.length < suggestions.groups.length ? subtle : primary}
+              onClick={() => acceptAll(suggestions.groups)}
+            >
               Accept all ({suggestions.groups.length})
             </button>
           </div>
@@ -347,7 +371,7 @@ function SuggestionsTab({
                         />
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums">
-                        <span className={g.confidence < 0.9 ? "text-amber-700" : ""}>
+                        <span className={g.confidence < suggestions.confident_threshold ? "text-amber-700" : ""}>
                           {Math.round(g.confidence * 100)}%
                         </span>
                       </td>

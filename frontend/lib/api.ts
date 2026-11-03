@@ -270,7 +270,14 @@ export type RuleItem = {
 
 export type ReviewQueue = {
   total: number;
-  groups: { stem: string; count: number; example: string }[];
+  groups: {
+    stem: string;
+    count: number;
+    example: string;
+    hint_category_id: number | null; // a low-confidence AI guess, never applied on its own
+    hint_category_name: string | null;
+    hint_confidence: number | null;
+  }[];
 };
 
 export type CorrectionResult = {
@@ -298,4 +305,4 @@ export type SuggestionGroup = {
   confidence: number;
 };
 
-export type Suggestions = { total: number; groups: SuggestionGroup[] };
+export type Suggestions = { total: number; confident_threshold: number; groups: SuggestionGroup[] };

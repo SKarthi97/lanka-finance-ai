@@ -77,7 +77,7 @@ def test_confident_suggestions_are_applied_and_marked_as_ai(prepared, session_fa
     }
 
     counts = classify(session_factory, test_settings, fake_ollama([reply], seen))
-    assert counts == {"stems": 2, "applied": 2, "unsure": 1}
+    assert counts == {"stems": 2, "applied": 2, "unsure": 1, "hinted": 0}
 
     rows = by_description(client)
     mystery = rows["MYSTERY MERCHANT 111"]
@@ -110,6 +110,30 @@ def test_an_invented_category_id_is_ignored(prepared, session_factory, test_sett
     assert by_description(client)["MYSTERY MERCHANT 111"]["category_id"] is None
 
 
+def test_a_category_name_reply_is_mapped_to_its_id(prepared, session_factory, test_settings):
+    client, _ = prepared
+    shopping = categories(client)["Shopping"]["id"]
+    seen: list = []
+    reply = {"results": [{"index": 0, "category": "Shopping", "confidence": 0.95}]}
+
+    counts = classify(session_factory, test_settings, fake_ollama([reply], seen))
+    assert counts["applied"] >= 1
+    assert by_description(client)["MYSTERY MERCHANT 111"]["category_id"] == shopping
+    # The model is offered names (a closed list), not numeric ids.
+    allowed = seen[0]["format"]["properties"]["results"]["items"]["properties"]["category"]["enum"]
+    assert "Shopping" in allowed and None in allowed
+    assert "Shopping (expense)" in seen[0]["prompt"] or "- Shopping" in seen[0]["prompt"]
+
+
+def test_an_invented_category_name_is_ignored(prepared, session_factory, test_settings):
+    client, _ = prepared
+    reply = {"results": [{"index": 0, "category": "Spaceships", "confidence": 0.99}]}
+
+    counts = classify(session_factory, test_settings, fake_ollama([reply], []))
+    assert counts["applied"] == 0
+    assert by_description(client)["MYSTERY MERCHANT 111"]["category_id"] is None
+
+
 def test_out_of_range_indexes_are_ignored(prepared, session_factory, test_settings):
     client, _ = prepared
     shopping = categories(client)["Shopping"]["id"]
@@ -127,7 +151,7 @@ def test_an_unusable_reply_leaves_rows_untouched_so_they_are_retried(
 
     counts = classify(session_factory, test_settings, fake_ollama(["this is not json"] * 2, seen))
 
-    assert counts == {"stems": 2, "applied": 0, "unsure": 0}  # not "unsure": the model never answered
+    assert counts == {"stems": 2, "applied": 0, "unsure": 0, "hinted": 0}  # not "unsure": the model never answered
     assert len(seen) == 2  # one retry, then give up
     assert by_description(client)["MYSTERY MERCHANT 111"]["classification_source"] is None
 
@@ -311,3 +335,83 @@ def test_the_ai_endpoint_refuses_when_disabled(logged_in, session_factory, test_
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "ai_disabled"
     assert client.post("/api/categorization/ai").status_code == 403  # CSRF
+
+
+# --- quality: tiers, examples, hints, clustering ------------------------------------------------
+
+
+def test_a_hunch_is_kept_as_a_hint_and_not_applied(prepared, session_factory, test_settings):
+    client, _ = prepared
+    shopping = categories(client)["Shopping"]["id"]
+    reply = {"results": [{"index": 0, "category_id": shopping, "confidence": 0.6}]}
+
+    counts = classify(session_factory, test_settings, fake_ollama([reply], []))
+    assert counts["applied"] == 0 and counts["hinted"] == 2
+
+    assert by_description(client)["MYSTERY MERCHANT 111"]["category_id"] is None
+    groups = {g["stem"]: g for g in client.get("/api/categorization/review").json()["groups"]}
+    hint = groups["MYSTERY MERCHANT"]
+    assert (hint["hint_category_name"], hint["hint_confidence"]) == ("Shopping", 0.6)
+    assert groups["UNKNOWN REFUND"]["hint_category_id"] is None
+
+
+def test_a_guess_below_the_hint_floor_is_dropped(prepared, session_factory, test_settings):
+    client, _ = prepared
+    shopping = categories(client)["Shopping"]["id"]
+    reply = {"results": [{"index": 0, "category_id": shopping, "confidence": 0.2}]}
+
+    counts = classify(session_factory, test_settings, fake_ollama([reply], []))
+    assert counts["hinted"] == 0
+    groups = client.get("/api/categorization/review").json()["groups"]
+    assert all(g["hint_category_id"] is None for g in groups)
+
+
+def test_confirmed_choices_are_shown_to_the_model_as_examples(prepared, session_factory, test_settings):
+    client, csrf = prepared
+    shopping = categories(client)["Shopping"]["id"]
+    client.post(
+        "/api/categorization/apply",
+        json={"stem": "UNKNOWN REFUND", "category_id": shopping},
+        headers=HEADERS(csrf),
+    )
+
+    seen: list = []
+    classify(session_factory, test_settings, fake_ollama([{"results": []}], seen))
+    prompt = seen[0]["prompt"]
+    assert "UNKNOWN REFUND => Shopping" in prompt
+    assert "already confirmed" in prompt
+
+
+def test_no_examples_section_without_confirmed_choices(prepared, session_factory, test_settings):
+    seen: list = []
+    classify(session_factory, test_settings, fake_ollama([{"results": []}], seen))
+    assert "already confirmed" not in seen[0]["prompt"]
+
+
+def test_amount_hints_are_off_by_default_and_coarse_when_on(prepared, session_factory, test_settings):
+    seen: list = []
+    classify(session_factory, test_settings, fake_ollama([{"results": []}], seen))
+    assert "money" not in seen[0]["prompt"]
+
+    with session_factory() as db:  # a second pass needs rows that are still undecided
+        db.execute(Transaction.__table__.update().values(classification_source=None))
+        db.commit()
+    test_settings.llm_amount_hints = True
+    seen.clear()
+    classify(session_factory, test_settings, fake_ollama([{"results": []}], seen))
+    prompt = seen[0]["prompt"]
+    assert "MYSTERY MERCHANT [money out, small]" in prompt
+    assert "UNKNOWN REFUND [money in, small]" in prompt
+    for private in ("100.00", "300.00", "1,150.00", "900.00"):
+        assert private not in prompt
+
+
+def test_near_identical_spellings_are_asked_about_once(logged_in, session_factory, test_settings):
+    from app.services.categorizer import cluster_stems, description_stem
+
+    mapping = cluster_stems({"ATMCASHWDLWELLAWATTE": 3, "ATMCASHWDLWELLAWATTA": 1, "LOAN RECO": 2})
+    assert mapping["ATMCASHWDLWELLAWATTA"] == "ATMCASHWDLWELLAWATTE"
+    assert mapping["LOAN RECO"] == "LOAN RECO"
+    # short words are never merged on a one-letter difference
+    assert cluster_stems({"FUEL": 2, "FUND": 1})["FUND"] == "FUND"
+    assert description_stem("POS 4821 KEELLS COLOMBO REF 99") == "POS KEELLS COLOMBO"

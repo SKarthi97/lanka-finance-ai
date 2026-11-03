@@ -77,7 +77,8 @@ def test_normalise_and_stem():
     assert normalise("  atm   service\tcharge ") == "ATM SERVICE CHARGE"
     assert description_stem("LOAN RECO 85238526") == "LOAN RECO"
     assert description_stem("SLIPS IN - NOV2022") == "SLIPS IN"
-    assert description_stem("ATMCASHWDLJAFFNA CITY BR.") == "ATMCASHWDLJAFFNA CITY BR"
+    # A trailing branch marker says where, not what.
+    assert description_stem("ATMCASHWDLJAFFNA CITY BR.") == "ATMCASHWDLJAFFNA CITY"
     assert description_stem("0721600897") == "0721600897"  # nothing reusable: keep it whole
     assert description_stem("A B C D E F") == "A B C D"  # at most four words
 

@@ -324,6 +324,10 @@ class ReviewGroup(BaseModel):
     stem: str
     count: int
     example: str
+    # A low-confidence AI guess: offered as a one-click choice, never applied on its own.
+    hint_category_id: int | None = None
+    hint_category_name: str | None = None
+    hint_confidence: float | None = None
 
 
 class ReviewOut(BaseModel):
@@ -486,6 +490,7 @@ class SuggestionGroup(BaseModel):
 
 class SuggestionsOut(BaseModel):
     total: int
+    confident_threshold: float  # "accept all confident" covers groups at or above this
     groups: list[SuggestionGroup]
 
 
@@ -496,7 +501,9 @@ class SuggestionIn(BaseModel):
 
 @router.get("/categorization/suggestions", response_model=SuggestionsOut)
 def suggestions(
-    session: UserSession = Depends(get_current_session), db: Session = Depends(get_db)
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> SuggestionsOut:
     """What the local AI applied, grouped by description and suggested category."""
     groups: dict[tuple[str, int], dict] = {}
@@ -529,6 +536,7 @@ def suggestions(
     ordered = sorted(groups.items(), key=lambda item: (-item[1]["count"], item[0][0]))
     return SuggestionsOut(
         total=total,
+        confident_threshold=settings.llm_confident_threshold,
         groups=[
             SuggestionGroup(
                 stem=stem,

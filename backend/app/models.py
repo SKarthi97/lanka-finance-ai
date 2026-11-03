@@ -259,6 +259,10 @@ class Transaction(Base):
     classification_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Why: the rule pattern or "AI suggestion". Generic text only, never statement content.
     classification_explanation: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # A low-confidence AI guess (source llm_unsure): shown as a hint in Review, never applied.
+    suggested_category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("categories.id", ondelete="SET NULL"), nullable=True
+    )
     category: Mapped["Category | None"] = relationship(foreign_keys=[category_id])
     # Set when the same transaction also appears in another statement (overlapping
     # periods). Duplicates stay visible but are excluded from every total.

@@ -55,14 +55,31 @@ For transactions the rules leave, the worker asks the local model (Ollama, defau
 
 - **Only description text is sent**, as stems, to the Ollama container on the internal network.
   No amounts, balances, dates, account numbers or filenames. A test asserts this.
-- The reply is **schema-constrained JSON** and re-validated. A category id the model invents is
-  ignored; an out-of-range index is ignored; an unusable reply leaves the rows untouched so a
+- The reply is **schema-constrained JSON** and re-validated. The model answers with a category
+  *name* from a closed list (small models mix up numeric ids); the name is mapped to an id here.
+  A name the model invents is ignored; an out-of-range index is ignored; an unusable reply leaves the rows untouched so a
   later pass retries them.
 - Descriptions are treated as **data**. The prompt says so, and since the output can only be a
   category id from the list, text hidden in a description has nothing to act on.
-- Only suggestions at or above `LLM_CONFIDENCE_THRESHOLD` (default 0.8) are applied, marked
-  `AI` in the explorer. The rest are marked `llm_unsure` and stay in the review queue. The
-  button "Ask the local AI to suggest" gives them another chance.
+- **Three confidence tiers.** At or above `LLM_CONFIDENCE_THRESHOLD` (default 0.8) a suggestion
+  is applied, marked `AI` in the explorer and listed in the AI suggestions tab (where
+  "Accept confident" covers those at or above `LLM_CONFIDENT_THRESHOLD`, default 0.9). Between
+  `LLM_HINT_THRESHOLD` (0.4) and the threshold it is only a **hunch**: not applied, but kept in
+  `suggested_category_id` and shown beside the Review row as a one-click choice. Below that
+  the row is simply `llm_unsure`. The button "Ask the local AI to suggest" gives them another go.
+- **It learns from you.** Rules you made or learned from corrections are sent as examples
+  (`stem => category`, up to `LLM_EXAMPLE_LIMIT`, the ones sharing words with the batch first).
+  Still description text only.
+- **Merchants are grouped before asking.** Stems drop trailing branch/reference words and
+  near-identical spellings (typos) are judged once through the most common one.
+- **Optional amount hints**, off by default (`LLM_AMOUNT_HINTS=true`): "money in/out" and a
+  coarse size band (small, medium, large, very large) per stem, never an exact figure. Helps
+  tell salary from a transfer; turn it on only if you accept that coarse signal reaching the
+  local model.
+- **Choosing a model.** `python -m app.tools.eval_categorizer qwen2.5:1.5b qwen2.5:3b` (run in
+  the backend container) scores models on a synthetic labelled set: coverage, accuracy, accuracy
+  when confident, and time. Changing the model is just `OLLAMA_MODEL`; see the thresholds above
+  if a larger model is over-confident.
 - Every call is recorded in `model_runs` (model, digest, prompt **hash**, duration, whether the
   JSON was valid). The text is never stored.
 - A failed AI pass (Ollama down, model missing) **never changes a statement's status**; the job

@@ -146,8 +146,44 @@ def description_stem(description: str) -> str:
         for t in normalise(description).split()
         if not any(ch.isdigit() for ch in t) and t not in {"-", "/"}
     ]
-    stem = " ".join(tokens[:4]).strip(" -./")
+    tokens = tokens[:4]
+    # Branch and reference words at the end say where or which, not what: "... CITY BR."
+    while len(tokens) > 1 and tokens[-1].strip(" -./") in _TRAILING_NOISE:
+        tokens.pop()
+    stem = " ".join(tokens).strip(" -./")
     return stem if len(stem) >= 3 else normalise(description)[:60]
+
+
+_TRAILING_NOISE = {"BR", "BRANCH", "REF", "REFNO", "TXN", "ID", "NO"}
+
+
+def cluster_stems(counts: dict[str, int], threshold: float = 0.9) -> dict[str, str]:
+    """Map each stem to a representative so near-identical merchants are judged once.
+
+    "ATMCASHWDLWELLAWATTE" and "ATMCASHWDLWELLAWATTA" differ by a typo; asking the model (or you)
+    about both is wasted effort. The most frequent spelling represents the group. Short stems
+    are never merged: a one-letter difference between short words is a different word.
+    """
+    from difflib import SequenceMatcher
+
+    representative: dict[str, str] = {}
+    reps: list[str] = []
+    for stem in sorted(counts, key=lambda s: (-counts[s], s)):
+        match = None
+        if len(stem) >= 10:
+            for rep in reps:
+                if (
+                    len(rep) >= 10
+                    and abs(len(rep) - len(stem)) <= 3
+                    and SequenceMatcher(None, rep, stem).ratio() >= threshold
+                ):
+                    match = rep
+                    break
+        if match is None:
+            reps.append(stem)
+            match = stem
+        representative[stem] = match
+    return representative
 
 
 @dataclass(frozen=True)
@@ -392,10 +428,18 @@ def review_groups(db: Session, user_id: int, limit: int = 100) -> tuple[list[dic
 
     Duplicates (the same transaction in an overlapping statement) are left out.
     """
-    groups: dict[str, dict] = defaultdict(lambda: {"count": 0, "example": None})
+    groups: dict[str, dict] = defaultdict(
+        lambda: {"count": 0, "example": None, "hints": Counter(), "confidence": {}}
+    )
     total = 0
-    for _id, description in db.execute(
-        select(Transaction.id, Transaction.original_description).where(
+    for _id, description, suggested, source, confidence in db.execute(
+        select(
+            Transaction.id,
+            Transaction.original_description,
+            Transaction.suggested_category_id,
+            Transaction.classification_source,
+            Transaction.classification_confidence,
+        ).where(
             Transaction.user_id == user_id,
             Transaction.is_duplicate.is_(False),
             Transaction.category_id.is_(None),
@@ -409,13 +453,27 @@ def review_groups(db: Session, user_id: int, limit: int = 100) -> tuple[list[dic
         group = groups[stem]
         group["count"] += 1
         group["example"] = group["example"] or description
+        if source == "llm_unsure" and suggested is not None:
+            group["hints"][suggested] += 1
+            group["confidence"][suggested] = confidence
         total += 1
 
+    names = {c.id: c.name for c in db.scalars(select(Category).where(Category.user_id == user_id))}
     ordered = sorted(groups.items(), key=lambda item: (-item[1]["count"], item[0]))[:limit]
-    return (
-        [{"stem": stem, "count": g["count"], "example": g["example"]} for stem, g in ordered],
-        total,
-    )
+    result = []
+    for stem, g in ordered:
+        hint_id = g["hints"].most_common(1)[0][0] if g["hints"] else None
+        result.append(
+            {
+                "stem": stem,
+                "count": g["count"],
+                "example": g["example"],
+                "hint_category_id": hint_id if hint_id in names else None,
+                "hint_category_name": names.get(hint_id) if hint_id is not None else None,
+                "hint_confidence": g["confidence"].get(hint_id) if hint_id is not None else None,
+            }
+        )
+    return result, total
 
 
 def classify_all_users(db: Session) -> int:

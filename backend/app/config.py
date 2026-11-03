@@ -42,6 +42,15 @@ class Settings(BaseSettings):
     llm_classify_enabled: bool = True
     # Only suggestions at or above this confidence are applied; the rest go to review.
     llm_confidence_threshold: float = 0.8
+    # Between this and the threshold the guess is kept only as a hint in Review (not applied).
+    llm_hint_threshold: float = 0.4
+    # The Suggestions tab offers "accept all" for suggestions at or above this confidence.
+    llm_confident_threshold: float = 0.9
+    # Your own confirmed descriptions, shown to the model as examples (descriptions only).
+    llm_example_limit: int = 12
+    # Also tell the model whether money came in or went out and a coarse size band
+    # (small/medium/large). Off by default: with it off only description text is sent.
+    llm_amount_hints: bool = False
 
     # Job queue / worker.
     job_poll_s: float = 2.0
