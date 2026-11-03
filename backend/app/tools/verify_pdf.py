@@ -117,6 +117,10 @@ def yes_no(value: bool) -> str:
     return "yes" if value else "no"
 
 
+def _yn(value: bool | None) -> str:
+    return "unknown" if value is None else yes_no(value)
+
+
 def report(
     pages: list[str], bank_code: str | None, shape: bool, out=print, blocks: bool = False
 ) -> None:
@@ -156,6 +160,36 @@ def report(
                 out(f"check {name}: passed {counts['passed']}, failed {counts['failed']}")
             histogram = Counter(issue.code for issue in result.issues)
             out(f"issue codes: {dict(histogram) or 'none'}")
+
+            # Date sanity, as counts only: no year or date is ever printed.
+            if rows:
+                per_year = Counter(r.date.year for r in rows)
+                out(f"years spanned: {len(per_year)} (rows per year, oldest first: "
+                    f"{[per_year[y] for y in sorted(per_year)]})")
+                gaps = [(b.date - a.date).days for a, b in zip(rows, rows[1:])]
+                out(f"largest gap between consecutive rows (days): {max(gaps, default=0)}")
+
+            # What the statement says about itself vs what was extracted: counts and
+            # yes/no only. The amounts themselves are never printed.
+            if not result.declared:
+                out("statement totals: not found")
+            window = result.declared_window
+            if window:
+                if window["covers"] == "all":
+                    out(f"statement totals cover: all {window['rows']} rows")
+                elif window["covers"] == "last_rows":
+                    out(
+                        f"statement totals cover: only the last {window['rows']} of "
+                        f"{len(rows)} rows (from page {window['from_page']})"
+                    )
+                else:
+                    out("statement totals cover: no combination of rows matches")
+            for key, d in result.declared.items():
+                out(
+                    f"statement totals {key}: items declared {d['declared_count']}, "
+                    f"found {d['found_count']}, count match {_yn(d['count_match'])}, "
+                    f"total match {_yn(d['total_match'])}"
+                )
 
     if blocks:
         out("")

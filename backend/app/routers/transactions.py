@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -8,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import get_current_session
-from app.models import Account, Bank, Transaction, UserSession
+from app.models import Account, Bank, Category, Transaction, UserSession
 
 router = APIRouter(prefix="/api", tags=["transactions"])
 
@@ -29,6 +30,14 @@ class TransactionOut(BaseModel):
     bank_code: str | None
     bank_name: str | None
     account_last4: str | None
+    is_duplicate: bool
+    duplicate_of_id: int | None
+    category_id: int | None
+    category_name: str | None
+    category_kind: str | None
+    classification_source: str | None
+    classification_confidence: float | None
+    classification_explanation: str | None
 
 
 class TransactionList(BaseModel):
@@ -40,10 +49,13 @@ class TransactionList(BaseModel):
 def list_transactions(
     document_id: int | None = None,
     bank_code: str | None = Query(default=None, max_length=32),
+    category_id: int | None = None,
+    uncategorised: bool = False,
     year: int | None = Query(default=None, ge=2000, le=2100),
     month: int | None = Query(default=None, ge=1, le=12),
     validation_status: str | None = None,
     flagged: bool = False,
+    duplicates: Literal["hide", "show", "only"] = "hide",
     q: str | None = Query(default=None, max_length=100),
     limit: int = Query(default=100, ge=1, le=MAX_PAGE_SIZE),
     offset: int = Query(default=0, ge=0),
@@ -55,6 +67,10 @@ def list_transactions(
         conditions.append(Transaction.document_id == document_id)
     if bank_code:
         conditions.append(Bank.code == bank_code)
+    if category_id is not None:
+        conditions.append(Transaction.category_id == category_id)
+    if uncategorised:
+        conditions.append(Transaction.category_id.is_(None))
     if year is not None:
         # A month only makes sense within a year.
         start = date(year, month or 1, 1)
@@ -65,15 +81,22 @@ def list_transactions(
         conditions += [Transaction.transaction_date >= start, Transaction.transaction_date < end]
     if validation_status:
         conditions.append(Transaction.validation_status == validation_status)
+    if duplicates == "hide":
+        conditions.append(Transaction.is_duplicate.is_(False))
+    elif duplicates == "only":
+        conditions.append(Transaction.is_duplicate.is_(True))
     if flagged:  # any row that did not pass every check
         conditions.append(Transaction.validation_status != "ok")
     if q:
         conditions.append(Transaction.original_description.ilike(f"%{q.strip()}%"))
 
     joined = (
-        select(Transaction, Bank.code, Bank.name, Account.account_number_last4)
+        select(
+            Transaction, Bank.code, Bank.name, Account.account_number_last4, Category.name, Category.kind
+        )
         .outerjoin(Bank, Transaction.bank_id == Bank.id)
         .outerjoin(Account, Transaction.account_id == Account.id)
+        .outerjoin(Category, Transaction.category_id == Category.id)
         .where(*conditions)
     )
     total = (
@@ -112,7 +135,15 @@ def list_transactions(
                 bank_code=bank_code_,
                 bank_name=bank_name,
                 account_last4=last4,
+                is_duplicate=t.is_duplicate,
+                duplicate_of_id=t.duplicate_of_id,
+                category_id=t.category_id,
+                category_name=category_name,
+                category_kind=category_kind,
+                classification_source=t.classification_source,
+                classification_confidence=t.classification_confidence,
+                classification_explanation=t.classification_explanation,
             )
-            for t, bank_code_, bank_name, last4 in rows
+            for t, bank_code_, bank_name, last4, category_name, category_kind in rows
         ],
     )

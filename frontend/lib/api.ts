@@ -109,6 +109,15 @@ export type DocumentItem = {
 
 export type Issue = { code: string; page: number | null; seq: number | null };
 
+export type DeclaredComparison = {
+  declared_count: number | null;
+  found_count: number;
+  count_match: boolean | null;
+  declared_total: string | null;
+  found_total: string;
+  total_match: boolean | null;
+};
+
 export type DocumentDetail = DocumentItem & {
   pages: { page_no: number; kind: string; char_count: number }[];
   account_last4: string | null;
@@ -123,8 +132,15 @@ export type DocumentDetail = DocumentItem & {
     reconciled: boolean;
     checks: Record<string, { passed: number; failed: number }>;
     issues: Issue[];
+    declared?: Record<string, DeclaredComparison>;
+    declared_window?: {
+      covers: "all" | "last_rows" | "unknown";
+      rows: number | null;
+      from_page: number | null;
+    } | null;
   } | null;
   transaction_count: number;
+  duplicate_count: number;
 };
 
 // Money is sent as exact decimal strings; never do arithmetic on it in the browser.
@@ -142,13 +158,38 @@ export type TransactionItem = {
   bank_code: string | null;
   bank_name: string | null;
   account_last4: string | null;
+  is_duplicate: boolean;
+  duplicate_of_id: number | null;
+  category_id: number | null;
+  category_name: string | null;
+  category_kind: string | null;
+  classification_source: string | null;
+  classification_confidence: number | null;
+  classification_explanation: string | null;
 };
 
 export type TransactionList = { total: number; items: TransactionItem[] };
 
 export type Bank = { code: string; name: string };
 
-export type Totals = { income: string; expense: string; net: string; transactions: number };
+export type Totals = {
+  income: string;
+  expense: string;
+  net: string;
+  transfers_in: string;
+  transfers_out: string;
+  transactions: number;
+  uncategorised: number;
+};
+
+export type CategoryTotal = {
+  category_id: number | null;
+  name: string;
+  kind: string | null;
+  income: string;
+  expense: string;
+  transactions: number;
+};
 
 export type Dashboard = {
   balances: {
@@ -162,6 +203,8 @@ export type Dashboard = {
   as_of: string | null;
   month: Totals;
   year: Totals;
+  month_by_category: CategoryTotal[];
+  year_by_category: CategoryTotal[];
   needs_review: number;
   has_data: boolean;
   years: number[];
@@ -176,4 +219,47 @@ export type Tracker = {
     account_last4: string | null;
     cells: Record<string, { status: "ok" | "review"; document_id: number }>;
   }[];
+};
+
+// --- categories ---------------------------------------------------------------------------
+
+export type CategoryItem = {
+  id: number;
+  name: string;
+  kind: "income" | "expense" | "transfer";
+  is_system: boolean;
+  transactions: number;
+};
+
+export type RuleItem = {
+  id: number;
+  pattern: string;
+  pattern_type: "contains" | "word";
+  category_id: number;
+  category_name: string;
+  origin: "system" | "user" | "correction";
+  priority: number;
+  enabled: boolean;
+  hit_count: number;
+};
+
+export type ReviewQueue = {
+  total: number;
+  groups: { stem: string; count: number; example: string }[];
+};
+
+export type CorrectionResult = {
+  transaction_id: number;
+  category_id: number | null;
+  category_name: string | null;
+  stem: string;
+  similar_count: number;
+  rule_id: number | null;
+  changed: number;
+};
+
+export type CategorizationStatus = {
+  ai_enabled: boolean;
+  ai_pending: boolean;
+  uncategorised: number;
 };

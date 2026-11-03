@@ -21,6 +21,9 @@ from app.config import Settings
 from app.job_queue import PermanentJobError
 from app.models import Bank, Document, Job, Transaction
 from app.services.accounts import get_or_create_account
+from app.services.categorizer import classify_rows
+from app.services.dedupe import refresh_duplicates
+from app.services.llm_classifier import enqueue_classification
 from app.services.retention import discard_stored_file
 from app.services.validation import ValidationResult, validate
 
@@ -98,6 +101,11 @@ def extract_transactions(db: Session, job: Job, settings: Settings) -> None:
         result.reconciled,
     )
 
+    # Whatever the rules left uncategorised goes to the local model, in its own job so a
+    # slow or missing model never holds up (or fails) the statement.
+    if enqueue_classification(db, settings, document.user_id):
+        db.commit()
+
     # Keep the file for statements that need a human look; drop it once reconciled.
     if document.status == "reconciled":
         discard_stored_file(db, document, settings)
@@ -155,11 +163,17 @@ def _persist(
         "issues": [
             {"code": i.code, "page": i.page, "seq": i.seq} for i in result.issues
         ],
+        "declared": result.declared,
+        "declared_window": result.declared_window,
     }
     document.status = "reconciled" if result.reconciled else "needs_review"
     db.flush()
 
     _check_continuity(db, document)
+    # New rows may repeat transactions from an overlapping statement (or vice versa).
+    refresh_duplicates(db, document.user_id)
+    # Built-in and learned rules categorise the new rows straight away.
+    classify_rows(db, document.user_id, document_id=document.id)
     db.commit()
 
 

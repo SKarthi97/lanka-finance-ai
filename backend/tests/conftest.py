@@ -37,7 +37,8 @@ def make_pdf(pages: list[str] | None = None, password: str | None = None) -> byt
 
 @pytest.fixture()
 def test_settings(tmp_path):
-    return Settings(documents_dir=str(tmp_path / "documents"))
+    # The AI pass is off by default so unrelated tests see only their own jobs.
+    return Settings(documents_dir=str(tmp_path / "documents"), llm_classify_enabled=False)
 
 
 @pytest.fixture()

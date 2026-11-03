@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     # once and kept in the settings table.
     account_fingerprint_key: str = ""
 
+    # AI fallback for transactions the rules cannot categorise (local Ollama only).
+    llm_classify_enabled: bool = True
+    # Only suggestions at or above this confidence are applied; the rest go to review.
+    llm_confidence_threshold: float = 0.8
+
     # Job queue / worker.
     job_poll_s: float = 2.0
     job_timeout_s: float = 120.0

@@ -81,3 +81,47 @@ def test_blocks_mode_prints_only_masked_balance_rows(tmp_path):
     assert "9999.99" in output  # the opening balance keeps only its shape
     for secret in SECRETS:
         assert secret not in output
+
+
+def test_report_gives_date_and_totals_checks_without_dates_or_amounts(tmp_path):
+    pdf = boc_pdf(
+        statement_date="30/06/2022",
+        opening=("28/12", "1,000.00"),
+        rows=[
+            ("31/12", "SYNTHETIC SHOP", "10.00", "990.00"),
+            ("06/01", "SYNTHETIC SHOP", "10.00", "980.00"),
+            ("30/06", "SYNTHETIC SHOP", "10.00", "970.00"),
+        ],
+        closing="970.00",
+        summary=(0, ".00", 3, "30.00"),
+    )
+    output = run(tmp_path, pdf)
+
+    assert "years spanned: 2 (rows per year, oldest first: [1, 2])" in output
+    assert "largest gap between consecutive rows (days): 175" in output
+    assert "statement totals withdrawals: items declared 3, found 3, count match yes, total match yes" in output
+    # counts and yes/no only: no year, date or amount is printed
+    for leaked in ("2020", "2021", "2022", "990.00", "30.00", "1,000.00"):
+        assert leaked not in output
+
+
+def test_report_says_when_the_statement_has_no_totals(tmp_path):
+    output = run(tmp_path, boc_pdf())
+    assert "statement totals: not found" in output
+
+
+def test_report_says_which_rows_the_statement_totals_cover(tmp_path):
+    pdf = boc_pdf(
+        rows=[
+            ("02/09", "SYNTHETIC SHOP", "100.00", "900.00"),
+            ("03/09", "SYNTHETIC SALARY", "2,500.00", "3,400.00"),
+            ("04/09", "SYNTHETIC SHOP", "500.00", "2,900.00"),
+        ],
+        closing="2,900.00",
+        summary=(1, "2,500.00", 1, "500.00"),
+    )
+    output = run(tmp_path, pdf)
+
+    assert "statement totals cover: only the last 2 of 3 rows (from page 1)" in output
+    for leaked in ("2,500.00", "2,900.00", "500.00"):
+        assert leaked not in output

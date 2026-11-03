@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import get_current_session
-from app.models import Bank, Document, Transaction, UserSession
+from app.models import Bank, Category, Document, Transaction, UserSession
 from app.services.extraction import ACTIVE_STATUSES
 
 router = APIRouter(prefix="/api", tags=["overview"])
@@ -52,7 +52,11 @@ def _transaction_years(db: Session, user_id: int, statuses: tuple[str, ...]) -> 
         for (y,) in db.execute(
             select(year_of)
             .join(Document, Document.id == Transaction.document_id)
-            .where(Document.user_id == user_id, Document.status.in_(statuses))
+            .where(
+                Document.user_id == user_id,
+                Document.status.in_(statuses),
+                Transaction.is_duplicate.is_(False),
+            )
             .distinct()
         )
     }
@@ -88,9 +92,21 @@ class BalanceOut(BaseModel):
 
 
 class Totals(BaseModel):
-    income: Decimal  # credits
-    expense: Decimal  # debits
+    income: Decimal  # credits that are not transfers
+    expense: Decimal  # debits that are not transfers
     net: Decimal
+    transfers_in: Decimal  # credits in categories of kind "transfer"
+    transfers_out: Decimal
+    transactions: int
+    uncategorised: int  # counted by direction until you categorise them
+
+
+class CategoryTotal(BaseModel):
+    category_id: int | None  # None = uncategorised
+    name: str
+    kind: str | None
+    income: Decimal
+    expense: Decimal
     transactions: int
 
 
@@ -100,25 +116,77 @@ class DashboardOut(BaseModel):
     as_of: date | None
     month: Totals
     year: Totals
+    month_by_category: list[CategoryTotal]
+    year_by_category: list[CategoryTotal]
     needs_review: int
     has_data: bool
     years: list[int]  # every year with transactions, for the period selector
 
 
-def _totals(db: Session, included, start: date, end: date) -> Totals:
-    credit, debit, count = db.execute(
+def _totals(
+    db: Session, included, start: date, end: date, categories: dict[int, Category]
+) -> tuple[Totals, list[CategoryTotal]]:
+    """Income and expense exclude transfers between your own accounts.
+
+    Uncategorised transactions are counted by direction (a credit is income, a debit is
+    expense) so the totals do not change meaning while categorising is unfinished.
+    A repeated transaction from an overlapping statement counts once.
+    """
+    rows = db.execute(
         select(
+            Transaction.category_id,
             func.coalesce(func.sum(Transaction.credit), 0),
             func.coalesce(func.sum(Transaction.debit), 0),
             func.count(),
-        ).where(
+        )
+        .where(
             Transaction.document_id.in_(included),
+            Transaction.is_duplicate.is_(False),
             Transaction.transaction_date >= start,
             Transaction.transaction_date < end,
         )
-    ).one()
-    income, expense = _dec(credit), _dec(debit)
-    return Totals(income=income, expense=expense, net=income - expense, transactions=count)
+        .group_by(Transaction.category_id)
+    ).all()
+
+    zero = Decimal("0.00")
+    income = expense = transfers_in = transfers_out = zero
+    count = uncategorised = 0
+    by_category: list[CategoryTotal] = []
+
+    for category_id, credit, debit, n in rows:
+        credit, debit = _dec(credit), _dec(debit)
+        category = categories.get(category_id)
+        count += n
+        if category is None:
+            uncategorised += n
+        if category is not None and category.kind == "transfer":
+            transfers_in += credit
+            transfers_out += debit
+        else:
+            income += credit
+            expense += debit
+        by_category.append(
+            CategoryTotal(
+                category_id=category_id,
+                name=category.name if category else "Uncategorised",
+                kind=category.kind if category else None,
+                income=credit,
+                expense=debit,
+                transactions=n,
+            )
+        )
+
+    by_category.sort(key=lambda c: (-max(c.expense, c.income), c.name))
+    totals = Totals(
+        income=income,
+        expense=expense,
+        net=income - expense,
+        transfers_in=transfers_in,
+        transfers_out=transfers_out,
+        transactions=count,
+        uncategorised=uncategorised,
+    )
+    return totals, by_category
 
 
 @router.get("/dashboard", response_model=DashboardOut)
@@ -173,6 +241,13 @@ def dashboard(
 
     month_start = date(year, month, 1)
     month_end = date(year + (month == 12), month % 12 + 1, 1)
+    categories = {
+        c.id: c for c in db.scalars(select(Category).where(Category.user_id == session.user_id))
+    }
+    month_totals, month_by_category = _totals(db, included, month_start, month_end, categories)
+    year_totals, year_by_category = _totals(
+        db, included, date(year, 1, 1), date(year + 1, 1, 1), categories
+    )
 
     needs_review = db.scalar(
         select(func.count())
@@ -184,8 +259,10 @@ def dashboard(
         balances=balances,
         total_balance=sum((b.balance for b in balances), Decimal("0.00")),
         as_of=max((b.as_of for b in balances), default=None),
-        month=_totals(db, included, month_start, month_end),
-        year=_totals(db, included, date(year, 1, 1), date(year + 1, 1, 1)),
+        month=month_totals,
+        year=year_totals,
+        month_by_category=month_by_category,
+        year_by_category=year_by_category,
         needs_review=needs_review or 0,
         has_data=bool(statements),
         years=sorted(_transaction_years(db, session.user_id, ACTIVE_STATUSES) | {year}),

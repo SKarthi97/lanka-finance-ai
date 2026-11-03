@@ -16,6 +16,7 @@ from app.db import get_db
 from app.deps import get_current_session
 from app.job_queue import enqueue
 from app.models import AuditLog, Bank, Document, DocumentPage, Job, Transaction, UserSession
+from app.services.dedupe import refresh_duplicates
 from app.services.retention import discard_stored_file
 
 log = logging.getLogger("documents")
@@ -55,6 +56,7 @@ class DocumentDetail(DocumentOut):
     extraction_confidence: float | None
     validation: dict | None
     transaction_count: int
+    duplicate_count: int  # rows also present in another statement, not counted twice
 
 
 def _error(status: int, code: str, message: str, **extra) -> HTTPException:
@@ -244,6 +246,12 @@ def get_document(
         )
     )
 
+    duplicate_count = db.scalar(
+        select(func.count()).select_from(Transaction).where(
+            Transaction.document_id == document.id, Transaction.is_duplicate.is_(True)
+        )
+    )
+
     return DocumentDetail(
         **_to_out(document).model_dump(),
         pages=[
@@ -260,6 +268,7 @@ def get_document(
         extraction_confidence=document.extraction_confidence,
         validation=document.validation,
         transaction_count=transaction_count or 0,
+        duplicate_count=duplicate_count or 0,
     )
 
 
@@ -292,6 +301,9 @@ def delete_document(
     db.execute(delete(DocumentPage).where(DocumentPage.document_id == document.id))
     db.execute(delete(Transaction).where(Transaction.document_id == document.id))
     db.delete(document)
+    db.flush()
+    # A duplicate whose original just disappeared becomes the real copy.
+    refresh_duplicates(db, session.user_id)
     db.commit()
 
     storage.remove_document(settings, relpath)
@@ -315,6 +327,10 @@ def accept_document(
         raise _error(409, "not_reviewable", "Only statements needing review can be accepted.")
 
     document.status = "accepted"
+    db.flush()
+    # Accepting changes which statement counts, so the canonical copy of a repeated
+    # transaction may change.
+    refresh_duplicates(db, session.user_id)
     db.add(
         AuditLog(
             user_id=session.user_id,

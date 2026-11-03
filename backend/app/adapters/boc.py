@@ -14,7 +14,13 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
-from app.adapters.base import Issue, ParsedStatement, ParsedTransaction, ParseError
+from app.adapters.base import (
+    DeclaredTotals,
+    Issue,
+    ParsedStatement,
+    ParsedTransaction,
+    ParseError,
+)
 
 CODE = "boc"
 VERSION = "1"
@@ -37,6 +43,41 @@ _ACCOUNT_LABEL = re.compile(
 _DIGITS = re.compile(r"^\d[\d\- ]{4,22}\d$")
 
 _CENTS = Decimal("0.01")
+
+# Closing summary: "TOTAL DEPOSITS", "52 item(s)", "<amount>" (cells or one line).
+_TOTAL_MARKERS = {
+    "TOTAL DEPOSITS": "deposits",
+    "TOTAL WITHDRAWALS": "withdrawals",
+    "TOTAL UNREALIZED CHEQUES": "unrealized",
+}
+_ITEMS = re.compile(r"(\d[\d,]*)\s*item", re.IGNORECASE)
+_AMOUNT_TOKEN = re.compile(r"(?:\d[\d,]*)?\.\d{2}")
+_TOTAL_LOOKAHEAD = 4  # lines after a TOTAL marker that may hold its count and amount
+
+
+def _total_marker(upper_line: str) -> str | None:
+    for marker, name in _TOTAL_MARKERS.items():
+        if marker in upper_line:
+            return name
+    return None
+
+
+def _absorb_declared(statement: ParsedStatement, which: str, text: str) -> None:
+    """Pick the item count and amount out of a line near a TOTAL marker."""
+    if which == "unrealized":
+        return
+    items = _ITEMS.search(text)
+    amounts = _AMOUNT_TOKEN.findall(text)
+    if not items and not amounts:
+        return
+
+    attribute = "declared_deposits" if which == "deposits" else "declared_withdrawals"
+    declared = getattr(statement, attribute) or DeclaredTotals()
+    if items and declared.count is None:
+        declared.count = int(items.group(1).replace(",", ""))
+    if amounts and declared.total is None:
+        declared.total = _money(amounts[-1])
+    setattr(statement, attribute, declared)
 
 
 def _money(text: str) -> Decimal | None:
@@ -160,6 +201,8 @@ class BocAdapter:
 
         state = _State(statement)
         reading_closing = False
+        capturing: str | None = None
+        capture_left = 0
 
         for page_no, text in lines:
             upper_line = text.upper()
@@ -182,13 +225,17 @@ class BocAdapter:
                     reading_closing = False
                 continue
 
-            if (
-                "TOTAL DEPOSITS" in upper_line
-                or "TOTAL WITHDRAWALS" in upper_line
-                or "TOTAL UNREALIZED CHEQUES" in upper_line
-            ):
+            marker = _total_marker(upper_line)
+            if marker:
                 state.flush()
                 state.reset()
+                capturing, capture_left = marker, _TOTAL_LOOKAHEAD
+                _absorb_declared(statement, marker, text)  # figures on the label's own line
+                continue
+
+            if capturing and capture_left > 0:
+                _absorb_declared(statement, capturing, text)
+                capture_left -= 1
                 continue
 
             if state.date_text:

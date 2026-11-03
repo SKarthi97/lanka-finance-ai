@@ -251,3 +251,102 @@ class Transaction(Base):
     # sha256 of (account, date, debit, credit, balance, normalised description):
     # the dedupe key from docs/00-architecture.md section 4, used in Phase 5.
     row_hash: Mapped[str] = mapped_column(String(64), index=True)
+    category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("categories.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # rule (built-in) | user_rule (a rule you made) | manual (you set it) | llm | llm_unsure
+    classification_source: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    classification_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Why: the rule pattern or "AI suggestion". Generic text only, never statement content.
+    classification_explanation: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    category: Mapped["Category | None"] = relationship(foreign_keys=[category_id])
+    # Set when the same transaction also appears in another statement (overlapping
+    # periods). Duplicates stay visible but are excluded from every total.
+    is_duplicate: Mapped[bool] = mapped_column(Boolean, default=False)
+    duplicate_of_id: Mapped[int | None] = mapped_column(
+        ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True
+    )
+
+
+class Category(Base):
+    __tablename__ = "categories"
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_categories_user_name"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    parent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("categories.id", ondelete="SET NULL"), nullable=True
+    )
+    name: Mapped[str] = mapped_column(String(64))
+    # income | expense | transfer. Transfers are excluded from income and expense totals.
+    kind: Mapped[str] = mapped_column(String(16))
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+
+
+class ClassificationRule(Base):
+    __tablename__ = "classification_rules"
+    __table_args__ = (
+        UniqueConstraint("user_id", "pattern_type", "pattern", name="uq_rules_pattern"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    # contains: pattern appears anywhere. word: pattern appears as a whole word.
+    pattern_type: Mapped[str] = mapped_column(String(16), default="contains")
+    pattern: Mapped[str] = mapped_column(String(128))
+    category_id: Mapped[int] = mapped_column(
+        ForeignKey("categories.id", ondelete="CASCADE")
+    )
+    # system (built in) | user (you wrote it) | correction (learned from a fix)
+    origin: Mapped[str] = mapped_column(String(16), default="user")
+    # Higher wins; ties go to the longer (more specific) pattern.
+    priority: Mapped[int] = mapped_column(Integer, default=10)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    hit_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+
+
+class ClassificationFeedback(Base):
+    __tablename__ = "classification_feedback"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    transaction_id: Mapped[int | None] = mapped_column(
+        ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True
+    )
+    from_category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("categories.id", ondelete="SET NULL"), nullable=True
+    )
+    to_category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("categories.id", ondelete="SET NULL"), nullable=True
+    )
+    rule_id: Mapped[int | None] = mapped_column(
+        ForeignKey("classification_rules.id", ondelete="SET NULL"), nullable=True
+    )
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ModelRun(Base):
+    """One call to the local model. Stores a hash of the prompt, never the text."""
+
+    __tablename__ = "model_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    model: Mapped[str] = mapped_column(String(128))
+    digest: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    purpose: Mapped[str] = mapped_column(String(32))
+    prompt_hash: Mapped[str] = mapped_column(String(64))
+    duration_ms: Mapped[int] = mapped_column(Integer)
+    valid_json: Mapped[bool] = mapped_column(Boolean)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

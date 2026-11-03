@@ -16,6 +16,7 @@ def boc_lines(
     account: str | None = None,
     account_style: str = "inline",
     bank_name: bool = True,
+    summary: tuple | None = None,
 ) -> list[str]:
     """One table cell per line, like the text PyMuPDF extracts from a BOC statement.
 
@@ -46,6 +47,15 @@ def boc_lines(
 
     if closing is not None:
         lines += [statement_date[:5], "BALANCE C/F", closing]
+
+    if summary:  # (deposit count, deposit total, withdrawal count, withdrawal total)
+        deposits, deposit_total, withdrawals, withdrawal_total = summary
+        lines += [
+            "TOTAL UNREALIZED CHEQUES", ".00",
+            "TOTAL DEPOSITS", f"{deposits} item(s)", deposit_total,
+            "TOTAL WITHDRAWALS", f"{withdrawals} item(s)", withdrawal_total,
+            "END OF STATEMENT",
+        ]  # fmt: skip
     return lines
 
 

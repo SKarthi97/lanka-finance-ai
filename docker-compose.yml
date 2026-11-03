@@ -61,6 +61,7 @@ services:
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-25}
       MAX_PAGES: ${MAX_PAGES:-300}
       RETAIN_DOCUMENTS: ${RETAIN_DOCUMENTS:-false}
+      LLM_CLASSIFY_ENABLED: ${LLM_CLASSIFY_ENABLED:-true}
     depends_on:
       postgres:
         condition: service_healthy
@@ -91,6 +92,12 @@ services:
       RETAIN_DOCUMENTS: ${RETAIN_DOCUMENTS:-false}
       JOB_TIMEOUT_S: ${JOB_TIMEOUT_S:-120}
       JOB_POLL_S: ${JOB_POLL_S:-2}
+      # Local model for the AI categorisation pass (reached over the internal network only).
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:1.5b}
+      OLLAMA_TIMEOUT_S: ${LLM_TIMEOUT_S:-120}
+      LLM_CLASSIFY_ENABLED: ${LLM_CLASSIFY_ENABLED:-true}
+      LLM_CONFIDENCE_THRESHOLD: ${LLM_CONFIDENCE_THRESHOLD:-0.8}
     depends_on:
       backend:
         condition: service_healthy

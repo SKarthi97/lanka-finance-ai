@@ -40,6 +40,14 @@ class ParsedTransaction:
 
 
 @dataclass
+class DeclaredTotals:
+    """A total the statement prints about itself (e.g. 'TOTAL DEPOSITS 52 item(s) ...')."""
+
+    count: int | None = None
+    total: Decimal | None = None
+
+
+@dataclass
 class ParsedStatement:
     bank_code: str
     adapter: str
@@ -52,6 +60,9 @@ class ParsedStatement:
     account_number: str | None
     transactions: list[ParsedTransaction] = field(default_factory=list)
     issues: list[Issue] = field(default_factory=list)
+    # Informational: what the statement says about its own deposits and withdrawals.
+    declared_deposits: DeclaredTotals | None = None
+    declared_withdrawals: DeclaredTotals | None = None
 
 
 class BankAdapter(Protocol):

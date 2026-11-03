@@ -13,6 +13,12 @@ from app.adapters.base import Issue, ParsedStatement
 ZERO = Decimal("0.00")
 DATE_TOLERANCE = timedelta(days=1)
 
+# Statement dates have no year, so the adapter infers it from row order. A row out of
+# order makes that inference jump by about a year (a ~360-day gap between neighbours).
+# Real accounts post interest or fees far more often, so a gap this long means a
+# mis-dated row. It sends the statement to review; accepting it is the user's call.
+MAX_ROW_GAP = timedelta(days=300)
+
 # Parser-level problems that mean a row may be missing or wrong.
 BLOCKING_PARSE_ISSUES = {
     "unexpected_amount_columns",
@@ -30,11 +36,83 @@ class ValidationResult:
     checks: dict[str, dict[str, int]] = field(default_factory=dict)
     issues: list[Issue] = field(default_factory=list)
     row_status: dict[int, str] = field(default_factory=dict)  # seq -> status
+    # What the statement says about its own totals vs what was extracted. Informational:
+    # it never affects `reconciled`, because what the item counts cover is not yet known.
+    declared: dict[str, dict] = field(default_factory=dict)
+    # Which rows the statement's totals seem to cover: all of them, only the last N, or
+    # no combination we can find. None when the statement prints no totals.
+    declared_window: dict | None = None
 
 
 def _check(checks: dict, name: str, passed: bool) -> None:
     entry = checks.setdefault(name, {"passed": 0, "failed": 0})
     entry["passed" if passed else "failed"] += 1
+
+
+def _declared_comparison(statement: ParsedStatement) -> dict[str, dict]:
+    credits = [t for t in statement.transactions if t.credit > ZERO]
+    debits = [t for t in statement.transactions if t.debit > ZERO]
+    out: dict[str, dict] = {}
+
+    for key, declared, rows, column in (
+        ("deposits", statement.declared_deposits, credits, "credit"),
+        ("withdrawals", statement.declared_withdrawals, debits, "debit"),
+    ):
+        if declared is None:
+            continue
+        found_total = sum((getattr(t, column) for t in rows), ZERO)
+        out[key] = {
+            "declared_count": declared.count,
+            "found_count": len(rows),
+            "count_match": None if declared.count is None else declared.count == len(rows),
+            "declared_total": None if declared.total is None else str(declared.total),
+            "found_total": str(found_total),
+            "total_match": None if declared.total is None else declared.total == found_total,
+        }
+    return out
+
+
+def _fits(declared, count: int, total: Decimal) -> bool:
+    if declared is None:
+        return True
+    if declared.count is not None and declared.count != count:
+        return False
+    if declared.total is not None and declared.total != total:
+        return False
+    return True
+
+
+def _declared_window(statement: ParsedStatement) -> dict | None:
+    """Find which rows the statement's own totals describe.
+
+    The printed counts might cover every row, or only a recent stretch (for example the
+    period since the last statement). Every "last N rows" window is tried against the
+    declared deposit and withdrawal counts and totals; the largest match wins.
+    """
+    deposits, withdrawals = statement.declared_deposits, statement.declared_withdrawals
+    rows = statement.transactions
+    if (deposits is None and withdrawals is None) or not rows:
+        return None
+
+    credit_count = debit_count = 0
+    credit_sum = debit_sum = ZERO
+    best: int | None = None  # start index of the largest matching window
+    for start in range(len(rows) - 1, -1, -1):
+        row = rows[start]
+        if row.credit > ZERO:
+            credit_count += 1
+            credit_sum += row.credit
+        if row.debit > ZERO:
+            debit_count += 1
+            debit_sum += row.debit
+        if _fits(deposits, credit_count, credit_sum) and _fits(withdrawals, debit_count, debit_sum):
+            best = start  # keeps moving earlier, so the largest window wins
+
+    if best is None:
+        return {"covers": "unknown", "rows": None, "from_page": None}
+    if best == 0:
+        return {"covers": "all", "rows": len(rows), "from_page": rows[0].page_no}
+    return {"covers": "last_rows", "rows": len(rows) - best, "from_page": rows[best].page_no}
 
 
 def validate(statement: ParsedStatement) -> ValidationResult:
@@ -50,6 +128,7 @@ def validate(statement: ParsedStatement) -> ValidationResult:
 
     previous = statement.opening_balance
     period_start = statement.period_start
+    previous_date = period_start
 
     for tx in statement.transactions:
         # 1. exactly one of debit / credit is non-zero
@@ -65,6 +144,14 @@ def validate(statement: ParsedStatement) -> ValidationResult:
             if not consistent:
                 fail_row(tx.seq, tx.page_no, "row_balance_mismatch", "balance_mismatch")
         previous = tx.balance
+
+        # 2b. consecutive dates must not jump by almost a year (mis-ordered row)
+        if previous_date is not None:
+            plausible = tx.date - previous_date <= MAX_ROW_GAP
+            _check(checks, "date_sequence", plausible)
+            if not plausible:
+                fail_row(tx.seq, tx.page_no, "suspicious_date_gap")
+        previous_date = tx.date
 
         # 3. date within the statement period (one day tolerance)
         if period_start is not None:
@@ -123,4 +210,6 @@ def validate(statement: ParsedStatement) -> ValidationResult:
         checks=checks,
         issues=issues,
         row_status=row_status,
+        declared=_declared_comparison(statement),
+        declared_window=_declared_window(statement),
     )

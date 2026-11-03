@@ -65,10 +65,40 @@ stays one row.
 | `date_in_period` | between period start - 1 day and statement date + 1 day |
 | `statement_reconciliation` | opening + credits - debits = closing |
 | `rows_parsed` | the parser skipped no row |
+| `date_sequence` | consecutive rows are at most 300 days apart; a larger jump means a mis-ordered row shifted the inferred year, so the statement goes to review |
 | cross-statement | opening = previous closing; no period overlap or gap (same account; reported, never blocking) |
 
 Confidence is computed from these checks (share of clean rows, capped at 0.5 when the
 statement does not reconcile), never self-reported by a model.
+
+### Statement totals (informational)
+
+The statement prints "TOTAL DEPOSITS n item(s) amount" and "TOTAL WITHDRAWALS ...". They are
+compared with the extracted credit and debit rows and shown on the statement page and in
+`validation.declared`. They never affect `reconciled`: what the item counts cover has not
+been confirmed against real statements yet. Once it has, this can become a blocking check.
+
+To find out what they cover, `validation.declared_window` tries every "last N rows" window
+against the declared counts and totals and reports `all` rows, `last_rows` (with N and the
+starting page: the totals describe a recent period only) or `unknown` (no window matches).
+The statement page shows it in words and `verify_pdf` prints it as counts only
+(`statement totals cover: ...`). Run the tool on a real statement to learn the answer.
+
+## Duplicate transactions (overlapping statements)
+
+A long statement plus a monthly one (or a re-downloaded copy with different bytes) contain
+the same transactions; the file hash cannot see that. `services/dedupe.py` compares rows by
+`row_hash` (account, date, debit, credit, **running balance**, normalised description). The
+running balance makes false matches practically impossible, and identical rows inside one
+statement are never treated as duplicates of each other.
+
+One copy stays the original; the others get `is_duplicate` and `duplicate_of_id`. Which copy
+is the original: a statement that counts (reconciled or accepted) beats one needing review;
+among equals, the earlier upload. Flags are recomputed after extraction, after accepting, after
+deleting a statement, and once at worker startup (backfill, idempotent). Duplicates stay visible
+(explorer "Show duplicates", grey rows on the statement page) but are excluded from the
+dashboard totals, balances' income/expense and year lists. The match depends on identical
+descriptions, so re-run extraction after a parser change that alters descriptions.
 
 ## Account numbers
 
@@ -89,7 +119,11 @@ docker compose run --rm -v "D:\lanka-finance-ai\sample_pdfs:/samples:ro" worker 
     python -m app.tools.verify_pdf /samples/Statement.pdf
 ```
 It prompts for the PDF password if needed (hidden, not stored). Output contains counts,
-pass/fail and issue codes only. Add `--shape` for the page layout with every digit masked
+pass/fail and issue codes only. It also reports, as counts and yes/no only (never a date, year or amount): how many years the
+rows span and rows per year, the largest gap between consecutive rows in days, and how the
+statement's own totals compare with what was extracted.
+Add `--blocks` for the masked lines around BALANCE B/F and C/F.
+Add `--shape` for the page layout with every digit masked
 to `9` and every letter to `A`/`a` (structural words such as PARTICULARS are kept). Review
 the output before sharing it.
 
@@ -111,7 +145,9 @@ the output before sharing it.
 - **Year selectors** (dashboard, tracker, transactions filter) list every year that has
   transactions, not just statement end years, so old years of a long statement can be chosen.
 - Statements without a detectable account number are grouped per bank, so two real
-  accounts at one bank would share a row until the account number is found.
+  accounts at one bank would share a row until the account number is found. The UI says
+  "account not detected" on those rows instead of hiding the fact.
+- Income and expense leave out transfers between your own accounts; see `04-categorization.md`.
 
 ## Data model additions (migration 0004)
 

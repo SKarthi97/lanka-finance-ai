@@ -3,8 +3,24 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Pager } from "@/components/Pager";
-import { api, ApiError, Bank, Tracker, TransactionList } from "@/lib/api";
-import { MONTHS_LONG, formatAmount, formatDate, formatMoney } from "@/lib/format";
+import {
+  api,
+  ApiError,
+  Bank,
+  CategoryItem,
+  CorrectionResult,
+  Tracker,
+  TransactionItem,
+  TransactionList,
+} from "@/lib/api";
+import {
+  MONTHS_LONG,
+  NO_ACCOUNT_HINT,
+  SOURCE_LABEL,
+  formatAmount,
+  formatDate,
+  formatMoney,
+} from "@/lib/format";
 
 const PAGE_SIZES = [25, 50, 100];
 
@@ -17,6 +33,10 @@ export default function TransactionsPage() {
   const [year, setYear] = useState("");
   const [month, setMonth] = useState("");
   const [onlyFlagged, setOnlyFlagged] = useState(false);
+  const [showDuplicates, setShowDuplicates] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState(""); // "" = all, "none" = uncategorised, else an id
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
+  const [reloadKey, setReloadKey] = useState(0);
   const [pageSize, setPageSize] = useState(50);
   const [page, setPage] = useState(1);
 
@@ -27,6 +47,7 @@ export default function TransactionsPage() {
 
   useEffect(() => {
     api<Bank[]>("/banks").then(setBanks).catch(() => undefined);
+    api<CategoryItem[]>("/categories").then(setCategories).catch(() => undefined);
     api<Tracker>("/tracker").then((t) => setYears(t.years)).catch(() => undefined);
   }, []);
 
@@ -49,6 +70,10 @@ export default function TransactionsPage() {
     if (year) params.set("year", year);
     if (year && month) params.set("month", month);
     if (onlyFlagged) params.set("flagged", "true");
+    if (categoryFilter === "none") params.set("uncategorised", "true");
+    else if (categoryFilter) params.set("category_id", categoryFilter);
+    // Repeated transactions (overlapping statements) are hidden unless asked for.
+    if (showDuplicates) params.set("duplicates", "show");
 
     let cancelled = false;
     api<TransactionList>(`/transactions?${params}`)
@@ -64,12 +89,40 @@ export default function TransactionsPage() {
     return () => {
       cancelled = true;
     };
-  }, [query, bank, year, month, onlyFlagged, pageSize, page]);
+  }, [query, bank, year, month, onlyFlagged, showDuplicates, categoryFilter, pageSize, page, reloadKey]);
 
   const total = data?.total ?? 0;
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
+
+  async function changeCategory(t: TransactionItem, value: string) {
+    const categoryId = value ? Number(value) : null;
+    try {
+      const result = await api<CorrectionResult>(`/transactions/${t.id}/category`, {
+        method: "PUT",
+        json: { category_id: categoryId },
+      });
+      // Offer to learn from the correction when other transactions look the same.
+      if (
+        categoryId !== null &&
+        result.similar_count > 0 &&
+        window.confirm(
+          `Use “${result.category_name}” for ${result.similar_count} other transaction${
+            result.similar_count === 1 ? "" : "s"
+          } like “${result.stem}”, and remember it for future statements?`,
+        )
+      ) {
+        await api<CorrectionResult>(`/transactions/${t.id}/category`, {
+          method: "PUT",
+          json: { category_id: categoryId, create_rule: true },
+        });
+      }
+      setReloadKey((n) => n + 1);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not change the category.");
+    }
+  }
 
   // Any filter change returns to the first page.
   const filter = <T,>(setter: (value: T) => void) => (value: T) => {
@@ -100,6 +153,21 @@ export default function TransactionsPage() {
           {banks.map((b) => (
             <option key={b.code} value={b.code}>
               {b.name}
+            </option>
+          ))}
+        </select>
+
+        <select
+          aria-label="Category"
+          value={categoryFilter}
+          onChange={(e) => filter(setCategoryFilter)(e.target.value)}
+          className={select}
+        >
+          <option value="">All categories</option>
+          <option value="none">Uncategorised</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
             </option>
           ))}
         </select>
@@ -144,6 +212,18 @@ export default function TransactionsPage() {
           />
           Only rows needing review
         </label>
+
+        <label
+          className="flex items-center gap-2 text-sm"
+          title="A transaction that appears in two overlapping statements is counted once. Tick to see the repeated copies too."
+        >
+          <input
+            type="checkbox"
+            checked={showDuplicates}
+            onChange={(e) => filter(setShowDuplicates)(e.target.checked)}
+          />
+          Show duplicates
+        </label>
       </div>
 
       {error && <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
@@ -182,6 +262,7 @@ export default function TransactionsPage() {
                 <th className="px-3 py-2 font-medium">Date</th>
                 <th className="px-3 py-2 font-medium">Bank</th>
                 <th className="px-3 py-2 font-medium">Description</th>
+                <th className="px-3 py-2 font-medium">Category</th>
                 <th className="px-3 py-2 text-right font-medium">Debit</th>
                 <th className="px-3 py-2 text-right font-medium">Credit</th>
                 <th className="px-3 py-2 text-right font-medium">Balance</th>
@@ -194,7 +275,7 @@ export default function TransactionsPage() {
                   key={t.id}
                   className={`border-b border-slate-100 last:border-0 ${
                     t.validation_status !== "ok" ? "bg-amber-50" : ""
-                  }`}
+                  } ${t.is_duplicate ? "text-slate-400" : ""}`}
                 >
                   <td className="whitespace-nowrap px-3 py-2">{formatDate(t.transaction_date)}</td>
                   <td className="whitespace-nowrap px-3 py-2">
@@ -204,11 +285,55 @@ export default function TransactionsPage() {
                     >
                       {t.bank_code ?? "?"}
                     </span>
-                    {t.account_last4 && (
+                    {t.account_last4 ? (
                       <span className="ml-1 text-xs text-slate-500">•••• {t.account_last4}</span>
+                    ) : (
+                      <span className="ml-1 text-xs text-slate-400" title={NO_ACCOUNT_HINT}>
+                        account not detected
+                      </span>
                     )}
                   </td>
-                  <td className="px-3 py-2">{t.description}</td>
+                  <td className="px-3 py-2">
+                    {t.description}
+                    {t.is_duplicate && (
+                      <span
+                        className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600"
+                        title="Also in another statement; not counted twice"
+                      >
+                        duplicate
+                      </span>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2">
+                    <select
+                      aria-label={`Category for transaction ${t.id}`}
+                      value={t.category_id ?? ""}
+                      onChange={(e) => changeCategory(t, e.target.value)}
+                      title={
+                        t.classification_source
+                          ? `${SOURCE_LABEL[t.classification_source] ?? t.classification_source}${
+                              t.classification_explanation ? `: ${t.classification_explanation}` : ""
+                            }`
+                          : "Not categorised"
+                      }
+                      className="max-w-[10rem] rounded border border-slate-200 bg-white px-1 py-0.5 text-xs"
+                    >
+                      <option value="">Uncategorised</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                    {t.classification_source === "llm" && (
+                      <span
+                        className="ml-1 rounded bg-violet-100 px-1 py-0.5 text-xs text-violet-800"
+                        title={t.classification_explanation ?? "AI suggestion"}
+                      >
+                        AI
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatAmount(t.debit)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatAmount(t.credit)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatMoney(t.running_balance)}</td>

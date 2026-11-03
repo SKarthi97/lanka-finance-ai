@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { api, Dashboard, Tracker, Totals } from "@/lib/api";
-import { MONTHS, MONTHS_LONG, formatDate, formatMoney } from "@/lib/format";
+import { api, CategoryTotal, Dashboard, Tracker, Totals } from "@/lib/api";
+import { MONTHS, MONTHS_LONG, NO_ACCOUNT_HINT, formatDate, formatMoney } from "@/lib/format";
 
 const select = "rounded border border-slate-300 bg-white px-2 py-1 text-sm";
 
@@ -28,20 +28,98 @@ function Card({
   );
 }
 
-function PeriodCards({ title, totals }: { title: string; totals: Totals | undefined }) {
+function CategoryBars({ items }: { items: CategoryTotal[] }) {
+  // Spending by category, transfers excluded. The biggest few, then the rest.
+  const spending = items
+    .filter((c) => c.kind !== "transfer" && Number(c.expense) > 0)
+    .sort((a, b) => Number(b.expense) - Number(a.expense));
+  if (spending.length === 0) return null;
+
+  const total = spending.reduce((sum, c) => sum + Number(c.expense), 0); // display only
+  const top = spending.slice(0, 8);
+  const rest = spending.slice(8);
+  const rows = rest.length
+    ? [...top, { ...rest[0], category_id: -1, name: `${rest.length} more`, expense: String(rest.reduce((n, c) => n + Number(c.expense), 0)) }]
+    : top;
+
+  return (
+    <ul className="space-y-1.5 rounded border border-slate-200 bg-white p-4 text-sm">
+      {rows.map((c) => {
+        const share = total > 0 ? (Number(c.expense) / total) * 100 : 0;
+        const uncategorised = c.category_id === null;
+        return (
+          <li key={c.category_id ?? "none"}>
+            <div className="flex justify-between gap-3">
+              <span className={uncategorised ? "text-amber-700" : ""}>
+                {uncategorised ? (
+                  <Link href="/categories" className="underline">
+                    {c.name}
+                  </Link>
+                ) : (
+                  c.name
+                )}
+              </span>
+              <span className="tabular-nums text-slate-600">
+                {formatMoney(c.expense)} · {share.toFixed(0)}%
+              </span>
+            </div>
+            <div className="mt-0.5 h-1.5 rounded bg-slate-100" aria-hidden="true">
+              <div
+                className={`h-1.5 rounded ${uncategorised ? "bg-amber-400" : "bg-slate-700"}`}
+                style={{ width: `${Math.max(share, 1)}%` }}
+              />
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function PeriodCards({
+  title,
+  totals,
+  byCategory,
+}: {
+  title: string;
+  totals: Totals | undefined;
+  byCategory: CategoryTotal[] | undefined;
+}) {
   const net = Number(totals?.net ?? 0);
+  const transfers = Number(totals?.transfers_in ?? 0) + Number(totals?.transfers_out ?? 0);
   return (
     <section>
       <h2 className="mb-2 font-medium">{title}</h2>
       <div className="grid gap-3 sm:grid-cols-3">
-        <Card label="Income (credits)" value={formatMoney(totals?.income)} tone="good" />
-        <Card label="Expense (debits)" value={formatMoney(totals?.expense)} tone="bad" />
+        <Card label="Income" value={formatMoney(totals?.income)} tone="good" />
+        <Card label="Expense" value={formatMoney(totals?.expense)} tone="bad" />
         <Card
           label="Net"
           value={formatMoney(totals?.net)}
           tone={net < 0 ? "bad" : net > 0 ? "good" : undefined}
           hint={totals ? `${totals.transactions} transactions` : undefined}
         />
+      </div>
+
+      {totals && transfers > 0 && (
+        <p className="mt-2 text-xs text-slate-500">
+          Not counted above: transfers between your own accounts, {formatMoney(totals.transfers_in)} in
+          and {formatMoney(totals.transfers_out)} out.
+        </p>
+      )}
+      {totals && totals.uncategorised > 0 && (
+        <p className="mt-1 text-xs text-amber-700">
+          {totals.uncategorised} transaction{totals.uncategorised === 1 ? "" : "s"} still uncategorised;
+          they are counted by direction (credits as income, debits as expense).{" "}
+          <Link href="/categories" className="underline">
+            Review
+          </Link>
+        </p>
+      )}
+
+      <div className="mt-3">
+        <h3 className="mb-1 text-sm text-slate-600">Spending by category</h3>
+        {byCategory && <CategoryBars items={byCategory} />}
       </div>
     </section>
   );
@@ -156,8 +234,12 @@ export default function DashboardPage() {
                           <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium uppercase">
                             {b.bank_code ?? "?"}
                           </span>
-                          {b.account_last4 && (
+                          {b.account_last4 ? (
                             <span className="ml-2 text-xs text-slate-500">•••• {b.account_last4}</span>
+                          ) : (
+                            <span className="ml-2 text-xs text-slate-400" title={NO_ACCOUNT_HINT}>
+                              account not detected
+                            </span>
                           )}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">{formatMoney(b.balance)}</td>
@@ -180,11 +262,11 @@ export default function DashboardPage() {
             </p>
           )}
 
-          <PeriodCards title={monthTitle} totals={dash?.month} />
-          <PeriodCards title={yearTitle} totals={dash?.year} />
+          <PeriodCards title={monthTitle} totals={dash?.month} byCategory={dash?.month_by_category} />
+          <PeriodCards title={yearTitle} totals={dash?.year} byCategory={dash?.year_by_category} />
           <p className="text-xs text-slate-500">
-            Income and expense are credits and debits from reconciled or accepted statements. Until
-            categories exist, they include transfers and loan payments.
+            Income and expense come from reconciled or accepted statements, without transfers between
+            your own accounts. A transaction that appears in two overlapping statements counts once.
           </p>
         </>
       )}
@@ -231,8 +313,12 @@ export default function DashboardPage() {
                       <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium uppercase">
                         {row.bank_code ?? "?"}
                       </span>
-                      {row.account_last4 && (
+                      {row.account_last4 ? (
                         <span className="ml-2 text-xs text-slate-500">•••• {row.account_last4}</span>
+                      ) : (
+                        <span className="ml-2 text-xs text-slate-400" title={NO_ACCOUNT_HINT}>
+                          account not detected
+                        </span>
                       )}
                     </td>
                     {MONTHS.map((name, i) => {

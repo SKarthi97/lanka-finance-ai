@@ -17,11 +17,17 @@ import {
   ISSUE_LABEL,
   STATUS_LABEL,
   STATUS_STYLE,
+  WINDOW_LABEL,
   explainError,
   formatAmount,
   formatDate,
   formatMoney,
 } from "@/lib/format";
+
+const DECLARED_LABEL: Record<string, string> = {
+  deposits: "Deposits",
+  withdrawals: "Withdrawals",
+};
 
 const PAGE_LIMIT = 500;
 
@@ -50,7 +56,7 @@ export default function DocumentPage() {
       const detail = await api<DocumentDetail>(`/documents/${id}`);
       setDoc(detail);
       const list = await api<TransactionList>(
-        `/transactions?document_id=${id}&limit=${PAGE_LIMIT}`,
+        `/transactions?document_id=${id}&duplicates=show&limit=${PAGE_LIMIT}`,
       );
       // The API lists newest first; a statement reads oldest first.
       setRows([...list.items].sort((a, b) => a.seq - b.seq));
@@ -176,6 +182,14 @@ export default function DocumentPage() {
         />
       </dl>
 
+      {doc.duplicate_count > 0 && (
+        <p role="status" className="rounded bg-slate-100 px-4 py-3 text-sm text-slate-700">
+          {doc.duplicate_count} row{doc.duplicate_count === 1 ? " is" : "s are"} also in another
+          statement and {doc.duplicate_count === 1 ? "is" : "are"} counted only once in totals.
+          They are shown below in grey.
+        </p>
+      )}
+
       {doc.status === "needs_review" && (
         <div className="rounded border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <p className="font-medium">This statement did not reconcile.</p>
@@ -191,6 +205,45 @@ export default function DocumentPage() {
             {busy ? "Accepting…" : "Accept anyway"}
           </button>
         </div>
+      )}
+
+      {doc.validation?.declared && Object.keys(doc.validation.declared).length > 0 && (
+        <section className="rounded border border-slate-200 bg-white p-4">
+          <h2 className="mb-1 font-medium">Statement totals</h2>
+          <p className="mb-2 text-xs text-slate-500">
+            What the statement prints about itself, next to what was extracted. For information
+            only: it does not affect reconciliation.
+          </p>
+          <table className="w-full text-left text-sm">
+            <thead className="text-slate-600">
+              <tr>
+                <th className="py-1 font-medium"></th>
+                <th className="py-1 font-medium">Items (statement / found)</th>
+                <th className="py-1 text-right font-medium">Total (statement / found)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(doc.validation.declared).map(([key, d]) => (
+                <tr key={key} className="border-t border-slate-100">
+                  <td className="py-1">{DECLARED_LABEL[key] ?? key}</td>
+                  <td className="py-1">
+                    {d.declared_count ?? "–"} / {d.found_count}{" "}
+                    {d.count_match === null ? "" : d.count_match ? "✓" : "≠"}
+                  </td>
+                  <td className="py-1 text-right tabular-nums">
+                    {formatMoney(d.declared_total)} / {formatMoney(d.found_total)}{" "}
+                    {d.total_match === null ? "" : d.total_match ? "✓" : "≠"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {doc.validation.declared_window && (
+            <p className="mt-2 text-sm text-slate-700">
+              {WINDOW_LABEL(doc.validation.declared_window, doc.transaction_count)}
+            </p>
+          )}
+        </section>
       )}
 
       {doc.validation && (
@@ -267,10 +320,17 @@ export default function DocumentPage() {
                         }
                         className={`cursor-pointer border-b border-slate-100 last:border-0 hover:bg-slate-50 ${
                           flagged ? "bg-amber-50" : ""
-                        } ${selectedPage === t.source_page ? "outline outline-1 outline-slate-300" : ""}`}
+                        } ${t.is_duplicate ? "text-slate-400" : ""} ${selectedPage === t.source_page ? "outline outline-1 outline-slate-300" : ""}`}
                       >
                         <td className="whitespace-nowrap px-3 py-2">{formatDate(t.transaction_date)}</td>
-                        <td className="px-3 py-2">{t.description}</td>
+                        <td className="px-3 py-2">
+                          {t.description}
+                          {t.is_duplicate && (
+                            <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
+                              duplicate
+                            </span>
+                          )}
+                        </td>
                         <td className="px-3 py-2 text-right tabular-nums">{formatAmount(t.debit)}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{formatAmount(t.credit)}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{formatMoney(t.running_balance)}</td>

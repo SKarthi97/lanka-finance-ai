@@ -56,6 +56,8 @@ export const ISSUE_LABEL: Record<string, string> = {
   row_balance_mismatch: "A row's amount does not match the change in the running balance.",
   row_amounts_invalid: "A row has both, or neither of, a debit and a credit.",
   date_outside_period: "A row is dated outside the statement period.",
+  suspicious_date_gap:
+    "Two consecutive rows are almost a year apart, so a row may be out of order or mis-dated.",
   opening_balance_missing: "The opening balance (BALANCE B/F) was not found.",
   closing_balance_missing: "The closing balance (BALANCE C/F) was not found.",
   opening_balance_unidentified: "The opening balance line could not be read.",
@@ -79,6 +81,7 @@ export const CHECK_LABEL: Record<string, string> = {
   row_balance: "Running balance per row",
   date_in_period: "Dates inside the statement period",
   statement_reconciliation: "Opening + credits − debits = closing",
+  date_sequence: "No near-year jump between consecutive dates",
   rows_parsed: "All rows could be read",
 };
 
@@ -108,3 +111,36 @@ export const MONTHS_LONG = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ]; // fmt: skip
+
+export const NO_ACCOUNT_HINT =
+  "No account number was detected on these statements, so they are grouped by bank. " +
+  "Two accounts at the same bank would share this row.";
+
+export const KIND_LABEL: Record<string, string> = {
+  income: "Income",
+  expense: "Expense",
+  transfer: "Transfer",
+};
+
+export const SOURCE_LABEL: Record<string, string> = {
+  rule: "Built-in rule",
+  user_rule: "Your rule",
+  manual: "Set by you",
+  llm: "AI suggestion",
+};
+
+export const ORIGIN_LABEL: Record<string, string> = {
+  system: "Built in",
+  user: "Yours",
+  correction: "Learned",
+};
+
+export const WINDOW_LABEL = (
+  window: { covers: string; rows: number | null; from_page: number | null },
+  totalRows: number,
+): string => {
+  if (window.covers === "all") return `The statement's totals match all ${window.rows} rows.`;
+  if (window.covers === "last_rows")
+    return `The statement's totals match only the last ${window.rows} of ${totalRows} rows (from page ${window.from_page}), so they appear to cover a recent period, not the whole statement.`;
+  return "The statement's totals do not match any combination of rows, so they may cover something else.";
+};
