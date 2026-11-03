@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { LoadError, RowsSkeleton } from "@/components/states";
+import { StatusBadge } from "@/components/StatusBadge";
 import {
   api,
   ApiError,
@@ -17,8 +18,6 @@ import {
   ACTIVE_STATUSES,
   CHECK_LABEL,
   ISSUE_LABEL,
-  STATUS_LABEL,
-  STATUS_STYLE,
   WINDOW_LABEL,
   explainError,
   formatAmount,
@@ -151,11 +150,7 @@ export default function DocumentPage() {
         </Link>
         <div className="mt-1 flex flex-wrap items-center gap-3">
           <h1 className="text-xl font-semibold">{doc.original_filename}</h1>
-          <span
-            className={`rounded px-2 py-0.5 text-xs ${STATUS_STYLE[doc.status] ?? STATUS_STYLE.queued}`}
-          >
-            {STATUS_LABEL[doc.status] ?? doc.status}
-          </span>
+          <StatusBadge status={doc.status} />
           {doc.file_available && ["needs_review", "failed", "reconciled"].includes(doc.status) && (
             <button
               onClick={reprocess}

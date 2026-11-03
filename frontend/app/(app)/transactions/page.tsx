@@ -28,6 +28,60 @@ const PAGE_SIZES = [25, 50, 100];
 
 const select = "rounded border border-slate-300 px-2 py-2 text-sm bg-surface";
 
+type SortKey = "date" | "amount" | "description" | "bank" | "category";
+
+/** Column header that sorts; the arrow shows the active direction. */
+function SortHeader({
+  label,
+  column,
+  sort,
+  order,
+  onSort,
+  align = "left",
+}: {
+  label: string;
+  column: SortKey;
+  sort: SortKey;
+  order: "asc" | "desc";
+  onSort: (column: SortKey) => void;
+  align?: "left" | "right";
+}) {
+  const active = sort === column;
+  return (
+    <th
+      className={`px-3 py-2 font-medium ${align === "right" ? "text-right" : ""}`}
+      aria-sort={active ? (order === "asc" ? "ascending" : "descending") : "none"}
+    >
+      <button
+        onClick={() => onSort(column)}
+        title={`Sort by ${label.toLowerCase()}`}
+        className={`inline-flex items-center gap-1 hover:text-slate-900 ${active ? "text-slate-900" : ""}`}
+      >
+        {label}
+        <span aria-hidden="true" className={active ? "" : "text-slate-400"}>
+          {active ? (order === "asc" ? "▲" : "▼") : "↕"}
+        </span>
+      </button>
+    </th>
+  );
+}
+
+/** A removable summary of one active filter. */
+function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-surface py-0.5 pl-3 pr-1 text-xs">
+      {label}
+      <button
+        onClick={onRemove}
+        aria-label={`Remove filter: ${label}`}
+        className="flex h-5 w-5 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+      >
+        ×
+      </button>
+    </span>
+  );
+}
+
 export default function TransactionsPage() {
   const confirm = useConfirm();
   const [search, setSearch] = useState("");
@@ -42,6 +96,11 @@ export default function TransactionsPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [pageSize, setPageSize] = useState(50);
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<SortKey>("date");
+  const [order, setOrder] = useState<"asc" | "desc">("desc");
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkCategory, setBulkCategory] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
 
   const [banks, setBanks] = useState<Bank[]>([]);
   const [years, setYears] = useState<number[]>([]);
@@ -74,20 +133,28 @@ export default function TransactionsPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
+  // The filters and ordering, without paging: shared by the list and the CSV export.
+  const filterParams = new URLSearchParams({ sort, order });
+  if (query) filterParams.set("q", query);
+  if (bank) filterParams.set("bank_code", bank);
+  if (year) filterParams.set("year", year);
+  if (year && month) filterParams.set("month", month);
+  if (onlyFlagged) filterParams.set("flagged", "true");
+  if (categoryFilter === "none") filterParams.set("uncategorised", "true");
+  else if (categoryFilter) filterParams.set("category_id", categoryFilter);
+  // Repeated transactions (overlapping statements) are hidden unless asked for.
+  if (showDuplicates) filterParams.set("duplicates", "show");
+  const filterKey = filterParams.toString();
+
+  // A different page or filter shows different rows, so the selection no longer applies.
   useEffect(() => {
-    const params = new URLSearchParams({
-      limit: String(pageSize),
-      offset: String((page - 1) * pageSize),
-    });
-    if (query) params.set("q", query);
-    if (bank) params.set("bank_code", bank);
-    if (year) params.set("year", year);
-    if (year && month) params.set("month", month);
-    if (onlyFlagged) params.set("flagged", "true");
-    if (categoryFilter === "none") params.set("uncategorised", "true");
-    else if (categoryFilter) params.set("category_id", categoryFilter);
-    // Repeated transactions (overlapping statements) are hidden unless asked for.
-    if (showDuplicates) params.set("duplicates", "show");
+    setSelected(new Set());
+  }, [filterKey, page, pageSize]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(filterKey);
+    params.set("limit", String(pageSize));
+    params.set("offset", String((page - 1) * pageSize));
 
     let cancelled = false;
     api<TransactionList>(`/transactions?${params}`)
@@ -103,7 +170,7 @@ export default function TransactionsPage() {
     return () => {
       cancelled = true;
     };
-  }, [query, bank, year, month, onlyFlagged, showDuplicates, categoryFilter, pageSize, page, reloadKey]);
+  }, [filterKey, pageSize, page, reloadKey]);
 
   const total = data?.total ?? 0;
   const pages = Math.max(1, Math.ceil(total / pageSize));
@@ -151,9 +218,105 @@ export default function TransactionsPage() {
     setPage(1);
   };
 
+  function sortBy(column: SortKey) {
+    if (column === sort) setOrder(order === "asc" ? "desc" : "asc");
+    else {
+      setSort(column);
+      // Text reads naturally A to Z; dates and amounts start with the newest or largest.
+      setOrder(column === "description" || column === "bank" || column === "category" ? "asc" : "desc");
+    }
+    setPage(1);
+  }
+
+  const rows = data?.items ?? [];
+  const allSelected = rows.length > 0 && rows.every((t) => selected.has(t.id));
+
+  function toggleRow(id: number) {
+    const next = new Set(selected);
+    if (!next.delete(id)) next.add(id);
+    setSelected(next);
+  }
+
+  async function applyBulk() {
+    const categoryId = bulkCategory === "none" ? null : Number(bulkCategory);
+    const name = categoryId === null ? "Uncategorised" : categories.find((c) => c.id === categoryId)?.name;
+    const ok = await confirm({
+      title: `Set ${selected.size} transaction${selected.size === 1 ? "" : "s"} to “${name}”?`,
+      message:
+        "They count as set by you, so rules and the AI will not change them. No rule is learned from a selection.",
+      confirmLabel: "Set category",
+    });
+    if (!ok) return;
+    try {
+      const result = await api<{ changed: number }>("/transactions/bulk-category", {
+        method: "POST",
+        json: { ids: [...selected], category_id: categoryId },
+      });
+      setNotice(`Updated ${result.changed} transaction${result.changed === 1 ? "" : "s"}.`);
+      setSelected(new Set());
+      setBulkCategory("");
+      setReloadKey((n) => n + 1);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not change the categories.");
+    }
+  }
+
+  // Active filters as removable chips.
+  const chips: { key: string; label: string; remove: () => void }[] = [];
+  if (query) chips.push({ key: "q", label: `“${query}”`, remove: () => setSearch("") });
+  if (bank)
+    chips.push({
+      key: "bank",
+      label: banks.find((b) => b.code === bank)?.name ?? bank.toUpperCase(),
+      remove: () => filter(setBank)(""),
+    });
+  if (categoryFilter)
+    chips.push({
+      key: "category",
+      label:
+        categoryFilter === "none"
+          ? "Uncategorised"
+          : (categories.find((c) => String(c.id) === categoryFilter)?.name ?? "Category"),
+      remove: () => filter(setCategoryFilter)(""),
+    });
+  if (year)
+    chips.push({
+      key: "period",
+      label: month ? `${MONTHS_LONG[Number(month) - 1]} ${year}` : year,
+      remove: () => {
+        filter(setYear)("");
+        setMonth("");
+      },
+    });
+  if (onlyFlagged) chips.push({ key: "flagged", label: "Needs review", remove: () => filter(setOnlyFlagged)(false) });
+  if (showDuplicates)
+    chips.push({ key: "dups", label: "Including duplicates", remove: () => filter(setShowDuplicates)(false) });
+
+  function clearAll() {
+    setSearch("");
+    setBank("");
+    setCategoryFilter("");
+    setYear("");
+    setMonth("");
+    setOnlyFlagged(false);
+    setShowDuplicates(false);
+    setPage(1);
+  }
+
   return (
     <section className="space-y-4">
-      <h1 className="text-xl font-semibold">Transactions</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-semibold">Transactions</h1>
+        {/* A plain link: the browser downloads the file with your session cookie. */}
+        <a
+          href={`/api/transactions/export.csv?${filterKey}`}
+          download="transactions.csv"
+          title="Download every transaction matching the filters (not just this page)"
+          className="rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100"
+        >
+          ⬇ Export CSV
+        </a>
+      </div>
 
       <div className="flex flex-wrap items-center gap-3">
         <input
@@ -247,6 +410,23 @@ export default function TransactionsPage() {
         </label>
       </div>
 
+      {chips.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2" aria-label="Active filters">
+          {chips.map((c) => (
+            <Chip key={c.key} label={c.label} onRemove={c.remove} />
+          ))}
+          <button onClick={clearAll} className="text-xs text-slate-500 underline hover:text-slate-900">
+            Clear all
+          </button>
+        </div>
+      )}
+
+      {notice && (
+        <p role="status" className="rounded bg-green-50 px-3 py-2 text-sm text-green-800">
+          {notice}
+        </p>
+      )}
+
       {error && (
         <LoadError
           message={error}
@@ -257,6 +437,40 @@ export default function TransactionsPage() {
         />
       )}
       {!data && !error && <RowsSkeleton rows={8} />}
+
+      {selected.size > 0 && (
+        <div
+          role="region"
+          aria-label="Bulk actions"
+          className="sticky top-16 z-10 flex flex-wrap items-center gap-3 rounded border border-accent/40 bg-surface px-3 py-2 text-sm shadow-lg"
+        >
+          <span className="font-medium">{selected.size} selected</span>
+          <select
+            aria-label="Category for the selected transactions"
+            value={bulkCategory}
+            onChange={(e) => setBulkCategory(e.target.value)}
+            className={select}
+          >
+            <option value="">Choose a category…</option>
+            <option value="none">Uncategorised</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={applyBulk}
+            disabled={!bulkCategory}
+            className="rounded bg-accent px-3 py-1.5 text-accent-fg disabled:opacity-50"
+          >
+            Set category
+          </button>
+          <button onClick={() => setSelected(new Set())} className="text-slate-500 underline">
+            Clear selection
+          </button>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
         <span>{total === 0 ? "No matches" : `${from}–${to} of ${total}`}</span>
@@ -289,12 +503,20 @@ export default function TransactionsPage() {
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-200 text-slate-600">
               <tr>
-                <th className="px-3 py-2 font-medium">Date</th>
-                <th className="px-3 py-2 font-medium">Bank</th>
-                <th className="px-3 py-2 font-medium">Description</th>
-                <th className="px-3 py-2 font-medium">Category</th>
-                <th className="px-3 py-2 text-right font-medium">Debit</th>
-                <th className="px-3 py-2 text-right font-medium">Credit</th>
+                <th className="w-8 px-3 py-2">
+                  <input
+                    type="checkbox"
+                    aria-label="Select every transaction on this page"
+                    checked={allSelected}
+                    onChange={() => setSelected(allSelected ? new Set() : new Set(rows.map((t) => t.id)))}
+                  />
+                </th>
+                <SortHeader label="Date" column="date" sort={sort} order={order} onSort={sortBy} />
+                <SortHeader label="Bank" column="bank" sort={sort} order={order} onSort={sortBy} />
+                <SortHeader label="Description" column="description" sort={sort} order={order} onSort={sortBy} />
+                <SortHeader label="Category" column="category" sort={sort} order={order} onSort={sortBy} />
+                <SortHeader label="Debit" column="amount" sort={sort} order={order} onSort={sortBy} align="right" />
+                <SortHeader label="Credit" column="amount" sort={sort} order={order} onSort={sortBy} align="right" />
                 <th className="px-3 py-2 text-right font-medium">Balance</th>
                 <th className="px-3 py-2 font-medium">Statement</th>
               </tr>
@@ -305,8 +527,16 @@ export default function TransactionsPage() {
                   key={t.id}
                   className={`border-b border-slate-100 last:border-0 ${
                     t.validation_status !== "ok" ? "bg-amber-50" : ""
-                  } ${t.is_duplicate ? "text-slate-400" : ""}`}
+                  } ${t.is_duplicate ? "text-slate-400" : ""} ${selected.has(t.id) ? "bg-accent/10" : ""}`}
                 >
+                  <td className="px-3 py-2">
+                    <input
+                      type="checkbox"
+                      aria-label={`Select transaction ${t.id}`}
+                      checked={selected.has(t.id)}
+                      onChange={() => toggleRow(t.id)}
+                    />
+                  </td>
                   <td className="whitespace-nowrap px-3 py-2">{formatDate(t.transaction_date)}</td>
                   <td className="whitespace-nowrap px-3 py-2">
                     <span

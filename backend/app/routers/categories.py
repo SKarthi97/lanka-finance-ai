@@ -416,3 +416,156 @@ def ask_ai(
     queued = enqueue_classification(db, settings, session.user_id)
     db.commit()
     return {"queued": queued}
+
+
+# --- bulk change and AI suggestions ----------------------------------------------------------------
+
+
+MAX_BULK = 500
+
+
+class BulkIn(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=MAX_BULK)
+    category_id: int | None  # None clears the category
+
+
+class BulkOut(BaseModel):
+    changed: int
+
+
+@router.post("/transactions/bulk-category", response_model=BulkOut)
+def bulk_category(
+    body: BulkIn,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> BulkOut:
+    """Set one category on several transactions at once (each counts as set by you).
+
+    No rule is learned: a selection is a hand-picked set, not a pattern. Use the Review tab
+    or the question after a single change to teach a rule.
+    """
+    if body.category_id is not None:
+        _category_or_404(db, session.user_id, body.category_id)
+    rows = db.scalars(
+        select(Transaction).where(
+            Transaction.user_id == session.user_id, Transaction.id.in_(set(body.ids))
+        )
+    ).all()
+    for transaction in rows:
+        categorizer.set_manual_category(db, session.user_id, transaction, body.category_id)
+    db.commit()
+    return BulkOut(changed=len(rows))
+
+
+# --- AI suggestions: accept or reject in bulk ------------------------------------------------------
+
+
+class SuggestionGroup(BaseModel):
+    stem: str
+    category_id: int
+    category_name: str
+    count: int
+    example: str
+    confidence: float  # the lowest in the group
+
+
+class SuggestionsOut(BaseModel):
+    total: int
+    groups: list[SuggestionGroup]
+
+
+class SuggestionIn(BaseModel):
+    stem: str = Field(min_length=2, max_length=128)
+    category_id: int
+
+
+@router.get("/categorization/suggestions", response_model=SuggestionsOut)
+def suggestions(
+    session: UserSession = Depends(get_current_session), db: Session = Depends(get_db)
+) -> SuggestionsOut:
+    """What the local AI applied, grouped by description and suggested category."""
+    groups: dict[tuple[str, int], dict] = {}
+    names: dict[int, str] = {}
+    total = 0
+    for description, category_id, confidence, name in db.execute(
+        select(
+            Transaction.original_description,
+            Transaction.category_id,
+            Transaction.classification_confidence,
+            Category.name,
+        )
+        .join(Category, Transaction.category_id == Category.id)
+        .where(
+            Transaction.user_id == session.user_id,
+            Transaction.is_duplicate.is_(False),
+            Transaction.classification_source == "llm",
+        )
+    ):
+        stem = categorizer.description_stem(description)
+        group = groups.setdefault(
+            (stem, category_id),
+            {"count": 0, "example": description, "confidence": 1.0},
+        )
+        group["count"] += 1
+        group["confidence"] = min(group["confidence"], confidence if confidence is not None else 1.0)
+        names[category_id] = name
+        total += 1
+
+    ordered = sorted(groups.items(), key=lambda item: (-item[1]["count"], item[0][0]))
+    return SuggestionsOut(
+        total=total,
+        groups=[
+            SuggestionGroup(
+                stem=stem,
+                category_id=category_id,
+                category_name=names[category_id],
+                count=g["count"],
+                example=g["example"],
+                confidence=round(g["confidence"], 2),
+            )
+            for (stem, category_id), g in ordered
+        ],
+    )
+
+
+@router.post("/categorization/suggestions/accept", response_model=ApplyOut)
+def accept_suggestion(
+    body: SuggestionIn,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> ApplyOut:
+    """Accept an AI suggestion for every transaction with this description, and remember it
+    as a rule so future statements follow it without the model."""
+    category = _category_or_404(db, session.user_id, body.category_id)
+    rule, changed = categorizer.apply_stem(
+        db, session.user_id, categorizer.normalise(body.stem), category.id
+    )
+    db.commit()
+    return ApplyOut(rule_id=rule.id, changed=changed)
+
+
+@router.post("/categorization/suggestions/reject", response_model=BulkOut)
+def reject_suggestion(
+    body: SuggestionIn,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> BulkOut:
+    """Take back an AI suggestion: those transactions return to the review queue."""
+    _category_or_404(db, session.user_id, body.category_id)
+    stem = categorizer.normalise(body.stem)
+    changed = 0
+    for transaction in db.scalars(
+        select(Transaction).where(
+            Transaction.user_id == session.user_id,
+            Transaction.classification_source == "llm",
+            Transaction.category_id == body.category_id,
+        )
+    ):
+        if categorizer.description_stem(transaction.original_description) == stem:
+            transaction.category_id = None
+            transaction.classification_source = None
+            transaction.classification_confidence = None
+            transaction.classification_explanation = None
+            changed += 1
+    db.commit()
+    return BulkOut(changed=changed)

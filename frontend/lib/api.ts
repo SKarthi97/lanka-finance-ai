@@ -288,3 +288,14 @@ export type CategorizationStatus = {
   ai_pending: boolean;
   uncategorised: number;
 };
+
+export type SuggestionGroup = {
+  stem: string;
+  category_id: number;
+  category_name: string;
+  count: number;
+  example: string;
+  confidence: number;
+};
+
+export type Suggestions = { total: number; groups: SuggestionGroup[] };

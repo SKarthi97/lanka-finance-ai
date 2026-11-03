@@ -91,6 +91,21 @@ function CategoryBars({ items, filter }: { items: CategoryTotal[]; filter: strin
   );
 }
 
+/** "35%" when you saved something; null otherwise. A percentage only means something between
+ * 0 and 100, so overspending or no income is described in words by savingNote instead. */
+function savingRate(totals: Totals): string | null {
+  const income = Number(totals.income);
+  const net = Number(totals.net);
+  return totals.transactions > 0 && income > 0 && net >= 0 ? `${Math.round((net / income) * 100)}%` : null;
+}
+
+function savingNote(totals: Totals): string | null {
+  if (totals.transactions === 0) return null;
+  if (Number(totals.income) === 0) return "no income";
+  if (Number(totals.net) < 0) return "spent more than earned";
+  return `saved ${savingRate(totals)} of income`;
+}
+
 function PeriodCards({
   title,
   totals,
@@ -114,17 +129,7 @@ function PeriodCards({
   const comparable = !!totals && !!previous && totals.transactions > 0 && previous.transactions > 0;
   const vs = (field: "income" | "expense") =>
     comparable && previousLabel ? compareText(totals![field], previous![field], previousLabel) : null;
-  const income = Number(totals?.income ?? 0);
-  // A percentage is only meaningful between 0 and 100: spending more than you earn, or earning
-  // nothing, is said in words instead of "-7204%".
-  const saving =
-    !totals || totals.transactions === 0
-      ? null
-      : income === 0
-        ? "no income"
-        : net < 0
-          ? "spent more than earned"
-          : `saved ${Math.round((net / income) * 100)}% of income`;
+  const saving = totals ? savingNote(totals) : null;
   const transfers = Number(totals?.transfers_in ?? 0) + Number(totals?.transfers_out ?? 0);
   return (
     <section>
@@ -200,6 +205,23 @@ export default function DashboardPage() {
         setDashFailed(true);
       });
   }, [year, month, bankParam, reload]);
+
+  // The summary cards always describe the latest month you have data for, whichever period is
+  // picked below, so the top of the page does not change while you browse.
+  const latestPeriod = dash?.as_of ? dash.as_of.split("-").map(Number).slice(0, 2) : null;
+  const latestKey = latestPeriod ? `${latestPeriod[0]}-${latestPeriod[1]}` : null;
+  const [kpi, setKpi] = useState<Dashboard | null>(null);
+  useEffect(() => {
+    if (!latestPeriod || !dash) return;
+    if (latestPeriod[0] === year && latestPeriod[1] === month) {
+      setKpi(dash);
+      return;
+    }
+    api<Dashboard>(`/dashboard?year=${latestPeriod[0]}&month=${latestPeriod[1]}${bankParam}`)
+      .then(setKpi)
+      .catch(() => setKpi(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestKey, year, month, bankParam, dash]);
 
   // The charts show January to December of the chosen year.
   useEffect(() => {
@@ -316,6 +338,8 @@ export default function DashboardPage() {
     });
 
   const monthFilter = `${bankParam}&year=${year}&month=${month}`;
+  const kpiMonthLabel = latestPeriod ? `${MONTHS_LONG[latestPeriod[1] - 1]} ${latestPeriod[0]}` : null;
+  const kpiYearLabel = latestPeriod ? String(latestPeriod[0]) : null;
   const yearFilter = `${bankParam}&year=${year}`;
 
   return (
@@ -345,14 +369,22 @@ export default function DashboardPage() {
       </div>
 
       {attention.length > 0 && (
-        <div role="status" className="space-y-1 rounded bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <div className="font-medium">Needs your attention</div>
-          <ul className="list-disc space-y-0.5 pl-5">
+        <section aria-labelledby="attention-heading">
+          <h2 id="attention-heading" className="sr-only">
+            Needs your attention
+          </h2>
+          <ul role="status" className="space-y-2">
             {attention.map((a) => (
-              <li key={a.key}>{a.text}</li>
+              <li
+                key={a.key}
+                className="flex items-start gap-2 rounded border border-l-4 border-amber-200 border-l-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+              >
+                <span aria-hidden="true">⚠</span>
+                <span>{a.text}</span>
+              </li>
             ))}
           </ul>
-        </div>
+        </section>
       )}
 
       {!dash ? (
@@ -391,16 +423,35 @@ export default function DashboardPage() {
           {/* Current finance */}
           <section>
             <h2 className="mb-2 font-medium">Current balance</h2>
-            <div className="grid gap-3 md:grid-cols-[1fr_2fr]">
+            <div className="mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Card
                 label="Total across accounts (LKR)"
                 value={formatMoney(dash?.total_balance)}
                 hint={
                   dash?.as_of
-                    ? `As of the latest statement, ${formatDate(dash.as_of)}${staleDays !== null ? ` (${staleDays} days ago)` : ""}`
+                    ? `As of ${formatDate(dash.as_of)}${staleDays !== null ? ` (${staleDays} days ago)` : ""}`
                     : undefined
                 }
               />
+              <Card
+                label={kpiMonthLabel ? `${kpiMonthLabel} net` : "Latest month net"}
+                value={kpi ? formatMoney(kpi.month.net) : "–"}
+                tone={kpi ? (Number(kpi.month.net) < 0 ? "bad" : Number(kpi.month.net) > 0 ? "good" : undefined) : undefined}
+                hint={kpi ? savingNote(kpi.month) ?? `${kpi.month.transactions} transactions` : undefined}
+              />
+              <Card
+                label={kpiYearLabel ? `${kpiYearLabel} to date, net` : "Year to date, net"}
+                value={kpi ? formatMoney(kpi.year.net) : "–"}
+                tone={kpi ? (Number(kpi.year.net) < 0 ? "bad" : Number(kpi.year.net) > 0 ? "good" : undefined) : undefined}
+                hint={kpi ? `${formatMoney(kpi.year.income)} in · ${formatMoney(kpi.year.expense)} out` : undefined}
+              />
+              <Card
+                label={kpiYearLabel ? `Saved in ${kpiYearLabel}` : "Saved this year"}
+                value={kpi ? savingRate(kpi.year) ?? "–" : "–"}
+                hint={kpi ? (savingRate(kpi.year) ? "of income" : savingNote(kpi.year) ?? undefined) : undefined}
+              />
+            </div>
+            <div>
               <div className="overflow-x-auto rounded border border-slate-200 bg-surface">
                 <table className="w-full text-left text-sm">
                   <thead className="border-b border-slate-200 text-slate-600">

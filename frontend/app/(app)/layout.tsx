@@ -9,6 +9,7 @@ import {
   api,
   ApiError,
   CategorizationStatus,
+  DocumentItem,
   Me,
   OllamaStatus,
   setCsrfToken,
@@ -38,6 +39,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
   const [ollama, setOllama] = useState<OllamaStatus | null>(null);
   const [uncategorised, setUncategorised] = useState(0);
+  const [needsReview, setNeedsReview] = useState(0);
+  const [collapsed, setCollapsed] = useState(false); // icons-only sidebar on large screens
   const [drawer, setDrawer] = useState(false); // sidebar open on small screens
   const [search, setSearch] = useState("");
   const [loadFailed, setLoadFailed] = useState(false);
@@ -59,6 +62,37 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         else setLoadFailed(true); // backend down or unreachable: say so instead of spinning
       });
   }, [router, attempt]);
+
+  // Remember the collapsed sidebar in this browser.
+  useEffect(() => {
+    try {
+      setCollapsed(window.localStorage.getItem("sidebarCollapsed") === "1");
+    } catch {
+      /* storage blocked: stay expanded */
+    }
+  }, []);
+
+  function toggleCollapsed() {
+    setCollapsed((value) => {
+      try {
+        window.localStorage.setItem("sidebarCollapsed", value ? "0" : "1");
+      } catch {
+        /* works for this visit only */
+      }
+      return !value;
+    });
+  }
+
+  // Badge counts refresh whenever you move between pages (after uploading, categorising...).
+  useEffect(() => {
+    if (!me) return;
+    api<CategorizationStatus>("/categorization/status")
+      .then((s) => setUncategorised(s.uncategorised))
+      .catch(() => undefined);
+    api<DocumentItem[]>("/documents")
+      .then((docs) => setNeedsReview(docs.filter((d) => d.status === "needs_review").length))
+      .catch(() => undefined);
+  }, [me, pathname]);
 
   // Close the drawer after navigating, and on Escape.
   useEffect(() => setDrawer(false), [pathname]);
@@ -162,26 +196,40 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Sidebar: always visible on large screens, a slide-in drawer on small ones */}
       <aside
-        className={`fixed bottom-0 left-0 top-14 z-20 w-64 overflow-y-auto border-r border-slate-200 bg-rail px-3 py-4 transition-transform duration-200 lg:translate-x-0 ${
-          drawer ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`fixed bottom-0 left-0 top-14 z-20 w-64 overflow-y-auto overflow-x-hidden border-r border-slate-200 bg-rail px-3 py-4 transition-all duration-200 lg:translate-x-0 ${
+          collapsed ? "lg:w-16 lg:px-2" : ""
+        } ${drawer ? "translate-x-0" : "-translate-x-full"}`}
       >
         <nav aria-label="Main" className="flex h-full flex-col">
           {NAV.map((group) => (
             <div key={group.heading} className="mb-4">
-              <div className="px-3 pb-2 text-[11px] font-bold uppercase tracking-widest text-slate-500">
+              <div
+                className={`px-3 pb-2 text-[11px] font-bold uppercase tracking-widest text-slate-500 ${
+                  collapsed ? "lg:hidden" : ""
+                }`}
+              >
                 {group.heading}
               </div>
               <ul className="space-y-1">
                 {group.items.map((item) => {
                   const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-                  const badge = item.href === "/categories" && uncategorised > 0 ? uncategorised : 0;
+                  const badge =
+                    item.href === "/categories"
+                      ? uncategorised
+                      : item.href === "/upload"
+                        ? needsReview
+                        : 0;
+                  const badgeHint =
+                    item.href === "/upload"
+                      ? `${badge} statement${badge === 1 ? "" : "s"} need review`
+                      : `${badge} uncategorised`;
                   return (
                     <li key={item.href}>
                       <Link
                         href={item.href}
                         aria-current={active ? "page" : undefined}
-                        className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm ${
+                        title={collapsed ? item.label : undefined}
+                        className={`relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm ${
                           active
                             ? "bg-accent/10 font-medium text-slate-900"
                             : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
@@ -190,10 +238,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         <span aria-hidden="true" className="w-6 text-center text-lg leading-none">
                           {item.icon}
                         </span>
-                        <span className="flex-1">{item.label}</span>
+                        <span className={`flex-1 ${collapsed ? "lg:hidden" : ""}`}>{item.label}</span>
                         {badge > 0 && (
-                          <span className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-bold text-accent-fg">
-                            {badge > 999 ? "999+" : badge}
+                          <span
+                            title={badgeHint}
+                            aria-label={badgeHint}
+                            className={`rounded-full bg-accent px-2 py-0.5 text-[11px] font-bold text-accent-fg ${
+                              collapsed ? "lg:absolute lg:right-1 lg:top-1 lg:px-1.5 lg:text-[10px]" : ""
+                            }`}
+                          >
+                            {badge > 99 ? "99+" : badge}
                           </span>
                         )}
                       </Link>
@@ -205,21 +259,35 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           ))}
 
           <div className="mt-auto border-t border-slate-200 pt-3">
-            <div className="px-3 pb-2 text-xs text-slate-500">Signed in as {me.username}</div>
+            <div className={`px-3 pb-2 text-xs text-slate-500 ${collapsed ? "lg:hidden" : ""}`}>
+              Signed in as {me.username}
+            </div>
             <button
               onClick={logout}
-              className="w-full rounded-lg px-3 py-2.5 text-left text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+              title={collapsed ? "Sign out" : undefined}
+              className="w-full whitespace-nowrap rounded-lg px-3 py-2.5 text-left text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-800"
             >
               <span aria-hidden="true" className="mr-3 inline-block w-6 text-center text-lg leading-none">
                 🚪
               </span>
-              Sign out
+              <span className={collapsed ? "lg:hidden" : ""}>Sign out</span>
+            </button>
+            <button
+              onClick={toggleCollapsed}
+              aria-pressed={collapsed}
+              title={collapsed ? "Expand the sidebar" : "Collapse the sidebar to icons"}
+              className="mt-1 hidden w-full whitespace-nowrap rounded-lg px-3 py-2.5 text-left text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-800 lg:block"
+            >
+              <span aria-hidden="true" className="mr-3 inline-block w-6 text-center text-lg leading-none">
+                {collapsed ? "»" : "«"}
+              </span>
+              <span className={collapsed ? "lg:hidden" : ""}>Collapse</span>
             </button>
           </div>
         </nav>
       </aside>
 
-      <div className="pt-14 lg:pl-64">
+      <div className={`pt-14 transition-all duration-200 ${collapsed ? "lg:pl-16" : "lg:pl-64"}`}>
         {aiUnavailable && (
           <div role="status" className="mx-4 mt-4 rounded bg-amber-50 px-4 py-3 text-sm text-amber-800">
             Local AI is unavailable ({ollama?.error ?? "unknown reason"}). Extraction and

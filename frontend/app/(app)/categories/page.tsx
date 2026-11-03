@@ -10,10 +10,12 @@ import {
   CategorizationStatus,
   RuleItem,
   ReviewQueue,
+  SuggestionGroup,
+  Suggestions,
 } from "@/lib/api";
 import { KIND_LABEL, ORIGIN_LABEL } from "@/lib/format";
 
-type Tab = "review" | "categories" | "rules";
+type Tab = "review" | "suggestions" | "categories" | "rules";
 
 const input = "rounded border border-slate-300 bg-surface px-2 py-1.5 text-sm";
 const primary = "rounded bg-accent px-3 py-1.5 text-sm text-accent-fg disabled:opacity-50";
@@ -54,22 +56,25 @@ export default function CategoriesPage() {
   const [rules, setRules] = useState<RuleItem[]>([]);
   const [queue, setQueue] = useState<ReviewQueue | null>(null);
   const [status, setStatus] = useState<CategorizationStatus | null>(null);
+  const [suggestions, setSuggestions] = useState<Suggestions | null>(null);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
       setLoadError(null);
-      const [c, r, q, s] = await Promise.all([
+      const [c, r, q, s, sg] = await Promise.all([
         api<CategoryItem[]>("/categories"),
         api<RuleItem[]>("/rules"),
         api<ReviewQueue>("/categorization/review"),
         api<CategorizationStatus>("/categorization/status"),
+        api<Suggestions>("/categorization/suggestions"),
       ]);
       setCategories(c);
       setRules(r);
       setQueue(q);
       setStatus(s);
+      setSuggestions(sg);
     } catch (err) {
       setLoadError(err instanceof ApiError ? err.message : "Could not load categories.");
     }
@@ -100,6 +105,7 @@ export default function CategoriesPage() {
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "review", label: `Review${queue ? ` (${queue.total})` : ""}` },
+    { id: "suggestions", label: `AI suggestions${suggestions ? ` (${suggestions.total})` : ""}` },
     { id: "categories", label: "Categories" },
     { id: "rules", label: "Rules" },
   ];
@@ -140,6 +146,9 @@ export default function CategoriesPage() {
       {!loadError && !queue && <RowsSkeleton />}
       {queue && tab === "review" && (
         <ReviewTab queue={queue} status={status} categories={categories} run={run} />
+      )}
+      {queue && tab === "suggestions" && (
+        <SuggestionsTab suggestions={suggestions} categories={categories} run={run} />
       )}
       {queue && tab === "categories" && <CategoriesTab categories={categories} run={run} />}
       {queue && tab === "rules" && <RulesTab rules={rules} categories={categories} run={run} />}
@@ -245,6 +254,141 @@ function ReviewTab({
             </tbody>
           </table>
         </div>
+      )}
+    </div>
+  );
+}
+
+// --- AI suggestions ---------------------------------------------------------------------------
+
+function SuggestionsTab({
+  suggestions,
+  categories,
+  run,
+}: {
+  suggestions: Suggestions | null;
+  categories: CategoryItem[];
+  run: Run;
+}) {
+  const confirm = useConfirm();
+  // A different category chosen for a group, instead of the model's suggestion.
+  const [override, setOverride] = useState<Record<string, string>>({});
+  const keyOf = (g: SuggestionGroup) => `${g.stem}|${g.category_id}`;
+
+  if (!suggestions) return <RowsSkeleton />;
+
+  async function acceptAll() {
+    const ok = await confirm({
+      title: `Accept all ${suggestions!.groups.length} suggestions?`,
+      message: `Every AI suggestion (${suggestions!.total} transaction${suggestions!.total === 1 ? "" : "s"}) becomes your choice and is remembered as a rule for future statements.`,
+      confirmLabel: "Accept all",
+    });
+    if (!ok) return;
+    run(async () => {
+      let changed = 0;
+      for (const g of suggestions!.groups) {
+        const result = await api<{ changed: number }>("/categorization/suggestions/accept", {
+          method: "POST",
+          json: { stem: g.stem, category_id: g.category_id },
+        });
+        changed += result.changed;
+      }
+      return `Accepted ${suggestions!.groups.length} suggestions (${changed} transactions) and saved them as rules.`;
+    });
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-slate-600">
+        What the local AI categorised on its own, grouped by description. Accept one to make it your
+        choice and remember it as a rule; reject it to send those transactions back to Review. You
+        can also pick a different category before accepting.
+      </p>
+
+      {suggestions.groups.length === 0 ? (
+        <p className="rounded border border-slate-200 bg-surface p-4 text-sm text-slate-600">
+          No AI suggestions waiting. Ask the AI from the Review tab to get some.
+        </p>
+      ) : (
+        <>
+          <div className="flex justify-end">
+            <button className={primary} onClick={acceptAll}>
+              Accept all ({suggestions.groups.length})
+            </button>
+          </div>
+          <div className="overflow-x-auto rounded border border-slate-200 bg-surface">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-slate-200 text-slate-600">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Description</th>
+                  <th className="px-3 py-2 text-right font-medium">Transactions</th>
+                  <th className="px-3 py-2 font-medium">AI suggested</th>
+                  <th className="px-3 py-2 text-right font-medium">Confidence</th>
+                  <th className="px-3 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {suggestions.groups.map((g) => {
+                  const chosen = override[keyOf(g)] ?? String(g.category_id);
+                  const changed = chosen !== String(g.category_id);
+                  return (
+                    <tr key={keyOf(g)} className="border-b border-slate-100 last:border-0">
+                      <td className="px-3 py-2">
+                        <div className="font-medium">{g.stem}</div>
+                        {g.example !== g.stem && <div className="text-xs text-slate-500">e.g. {g.example}</div>}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">{g.count}</td>
+                      <td className="px-3 py-2">
+                        <CategorySelect
+                          categories={categories}
+                          value={chosen}
+                          onChange={(v) => setOverride({ ...override, [keyOf(g)]: v })}
+                          label={`Category for ${g.stem}`}
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        <span className={g.confidence < 0.9 ? "text-amber-700" : ""}>
+                          {Math.round(g.confidence * 100)}%
+                        </span>
+                      </td>
+                      <td className="space-x-2 whitespace-nowrap px-3 py-2 text-right">
+                        <button
+                          className={primary}
+                          disabled={!chosen}
+                          onClick={() =>
+                            run(async () => {
+                              const result = await api<{ changed: number }>(
+                                changed ? "/categorization/apply" : "/categorization/suggestions/accept",
+                                { method: "POST", json: { stem: g.stem, category_id: Number(chosen) } },
+                              );
+                              return `Accepted “${g.stem}” for ${result.changed} transaction${result.changed === 1 ? "" : "s"} and saved a rule.`;
+                            })
+                          }
+                        >
+                          Accept
+                        </button>
+                        <button
+                          className={subtle}
+                          onClick={() =>
+                            run(async () => {
+                              const result = await api<{ changed: number }>(
+                                "/categorization/suggestions/reject",
+                                { method: "POST", json: { stem: g.stem, category_id: g.category_id } },
+                              );
+                              return `Rejected: ${result.changed} transaction${result.changed === 1 ? "" : "s"} back in Review.`;
+                            })
+                          }
+                        >
+                          Reject
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   );

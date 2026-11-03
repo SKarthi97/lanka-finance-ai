@@ -35,6 +35,13 @@ every month. This creates a `correction` rule and applies it to every transactio
 set by hand (replacing built-in results and AI suggestions). Each correction is logged in
 `classification_feedback`.
 
+## AI suggestions tab
+
+The Categories page lists what the model applied, grouped by description, with its confidence.
+Accepting a group makes it your choice and saves a rule; you can pick a different category first,
+or accept everything at once. Rejecting a group clears those transactions back to the Review
+queue (the model may suggest them again the next time you ask).
+
 ## Review queue
 
 Categories page, Review tab: uncategorised transactions grouped by stem, biggest first. Choose
@@ -83,7 +90,11 @@ off but not delete it.
 | `POST /api/categorization/apply` | one category for a whole description group |
 | `POST /api/categorization/reclassify` | re-run the rules on rows not set by hand |
 | `POST /api/categorization/ai`, `GET /api/categorization/status` | ask the AI pass, see its state |
-| `GET /api/transactions?category_id=&uncategorised=` | filters |
+| `GET /api/transactions?category_id=&uncategorised=&sort=&order=` | filters and ordering (`sort`: date, amount, description, bank, category) |
+| `GET /api/transactions/export.csv` | the same filters as a CSV file (the whole result; cells that start with `=`, `+`, `-` or `@` are neutralised) |
+| `POST /api/transactions/bulk-category` | one category for up to 500 selected transactions (set by you; no rule is learned) |
+| `GET /api/categorization/suggestions` | what the AI applied, grouped by description and category |
+| `POST /api/categorization/suggestions/accept`, `/reject` | accept (makes it your choice and learns a rule) or reject (back to Review) one group |
 | `GET /api/dashboard` | income/expense without transfers, transfers shown separately, spending by category |
 
 ## Limits

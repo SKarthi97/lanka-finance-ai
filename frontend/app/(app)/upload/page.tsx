@@ -6,7 +6,8 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import { LoadError, RowsSkeleton } from "@/components/states";
 import { StatementTracker } from "@/components/StatementTracker";
 import { api, ApiError, DocumentItem } from "@/lib/api";
-import { ACTIVE_STATUSES, STATUS_LABEL, STATUS_STYLE, explainError } from "@/lib/format";
+import { StatusBadge } from "@/components/StatusBadge";
+import { ACTIVE_STATUSES, explainError } from "@/lib/format";
 
 const BANKS = [{ code: "boc", name: "Bank of Ceylon" }];
 
@@ -261,12 +262,7 @@ export default function UploadPage() {
                     <td className="px-3 py-2">{d.page_count ?? "–"}</td>
                     <td className="px-3 py-2">{formatSize(d.size_bytes)}</td>
                     <td className="px-3 py-2">
-                      <span
-                        className={`rounded px-2 py-0.5 text-xs ${STATUS_STYLE[d.status] ?? STATUS_STYLE.queued}`}
-                        title={explainError(d.error) ?? undefined}
-                      >
-                        {STATUS_LABEL[d.status] ?? d.status}
-                      </span>
+                      <StatusBadge status={d.status} title={explainError(d.error) ?? undefined} />
                     </td>
                     <td className="space-x-3 whitespace-nowrap px-3 py-2 text-right">
                       {d.file_available && ["needs_review", "failed", "reconciled"].includes(d.status) && (
