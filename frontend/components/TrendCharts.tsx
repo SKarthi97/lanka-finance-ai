@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { TrendMonth } from "@/lib/api";
 import { MONTHS, formatMoney } from "@/lib/format";
 
@@ -27,6 +28,32 @@ function monthHref(m: TrendMonth, bank: string): string {
   return `/transactions?${params}`;
 }
 
+
+/** Floating readout for the hovered month; positioned as a share of the chart width. */
+function Tooltip({ index, count, title, lines }: { index: number; count: number; title: string; lines: [string, string, string][] }) {
+  const left = ((index + 0.5) / count) * 100;
+  return (
+    <div
+      role="presentation"
+      style={{ left: `${left}%` }}
+      className={`pointer-events-none absolute top-0 z-10 w-max max-w-[14rem] rounded border border-slate-300 bg-chrome px-3 py-2 text-xs shadow-lg ${
+        left > 60 ? "-translate-x-full" : left < 40 ? "" : "-translate-x-1/2"
+      }`}
+    >
+      <div className="mb-1 font-medium text-slate-900">{title}</div>
+      {lines.map(([label, value, color]) => (
+        <div key={label} className="flex items-center justify-between gap-4">
+          <span className="flex items-center gap-1 text-slate-600">
+            <span className="inline-block h-2 w-2 rounded-sm" style={{ background: color }} />
+            {label}
+          </span>
+          <span className="tabular-nums text-slate-900">{value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function IncomeExpenseChart({
   months,
   bank,
@@ -42,10 +69,39 @@ export function IncomeExpenseChart({
   const plotH = H - PAD.top - PAD.bottom;
   const slot = (W - PAD.left - PAD.right) / months.length;
   const barW = Math.min(18, slot / 2.6);
+  const [hover, setHover] = useState<number | null>(null);
+  const hovered = hover === null ? null : months[hover];
 
   return (
-    <div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Income and expense by month">
+    <div className="relative">
+      {hovered && hover !== null && (
+        <Tooltip
+          index={hover}
+          count={months.length}
+          title={`${MONTHS[hovered.month - 1]} ${hovered.year}`}
+          lines={[
+            ["Income", formatMoney(hovered.income), INCOME],
+            ["Expense", formatMoney(hovered.expense), EXPENSE],
+            ["Net", formatMoney(hovered.net), "#98a1b0"],
+          ]}
+        />
+      )}
+      <table className="sr-only">
+        <caption>Income and expense by month</caption>
+        <thead>
+          <tr><th>Month</th><th>Income</th><th>Expense</th></tr>
+        </thead>
+        <tbody>
+          {months.map((m) => (
+            <tr key={`${m.year}-${m.month}`}>
+              <td>{MONTHS[m.month - 1]} {m.year}</td>
+              <td>{formatMoney(m.income)}</td>
+              <td>{formatMoney(m.expense)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <svg aria-hidden="true" viewBox={`0 0 ${W} ${H}`} className="w-full" >
         <line x1={PAD.left} x2={W - PAD.right} y1={H - PAD.bottom} y2={H - PAD.bottom} stroke="#434859" />
         {months.map((m, i) => {
           const x = PAD.left + i * slot + slot / 2;
@@ -72,10 +128,12 @@ export function IncomeExpenseChart({
                 fill="transparent"
                 className="cursor-pointer"
                 onClick={() => onPick(m.year, m.month)}
+                onMouseEnter={() => setHover(i)}
+                onMouseLeave={() => setHover(null)}
               >
                 <title>{`Show ${MONTHS[m.month - 1]} ${m.year}`}</title>
               </rect>
-              <text x={x} y={H - 8} textAnchor="middle" fontSize="11" fill={active ? "#eef1f6" : "#8a93a3"} fontWeight={active ? 600 : 400}>
+              <text x={x} y={H - 8} textAnchor="middle" fontSize="11" fill={active ? "#eef1f6" : "#98a1b0"} fontWeight={active ? 600 : 400}>
                 {MONTHS[m.month - 1]}
               </text>
             </g>
@@ -89,7 +147,7 @@ export function IncomeExpenseChart({
         <span className="flex items-center gap-1">
           <span className="inline-block h-2 w-3 rounded-sm" style={{ background: EXPENSE }} /> Expense
         </span>
-        <span className="text-slate-400">Peak {compact(max)} · click a month to select it</span>
+        <span className="text-slate-400">Peak {compact(max)} · hover for figures, click a month to select it</span>
         <Link
           href={monthHref(
             months.find((m) => m.year === selected.year && m.month === selected.month) ?? months[months.length - 1],
@@ -105,6 +163,7 @@ export function IncomeExpenseChart({
 }
 
 export function BalanceChart({ months }: { months: TrendMonth[] }) {
+  const [hover, setHover] = useState<number | null>(null);
   const points = months.map((m) => (m.balance === null ? null : Number(m.balance)));
   const known = points.filter((p): p is number => p !== null);
   if (known.length < 2) {
@@ -134,9 +193,33 @@ export function BalanceChart({ months }: { months: TrendMonth[] }) {
   });
   if (current.length) segments.push(current);
 
+  const hovered = hover === null ? null : months[hover];
+
   return (
-    <div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Total balance at the end of each month">
+    <div className="relative">
+      {hovered && hover !== null && hovered.balance !== null && (
+        <Tooltip
+          index={hover}
+          count={months.length}
+          title={`${MONTHS[hovered.month - 1]} ${hovered.year}`}
+          lines={[["Balance", formatMoney(hovered.balance), BALANCE]]}
+        />
+      )}
+      <table className="sr-only">
+        <caption>Total balance at the end of each month</caption>
+        <thead>
+          <tr><th>Month</th><th>Balance</th></tr>
+        </thead>
+        <tbody>
+          {months.map((m) => (
+            <tr key={`${m.year}-${m.month}`}>
+              <td>{MONTHS[m.month - 1]} {m.year}</td>
+              <td>{m.balance === null ? "no data" : formatMoney(m.balance)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <svg aria-hidden="true" viewBox={`0 0 ${W} ${H}`} className="w-full">
         <line x1={PAD.left} x2={W - PAD.right} y1={H - PAD.bottom} y2={H - PAD.bottom} stroke="#434859" />
         {segments.map((seg, i) => (
           <polyline key={i} points={seg.join(" ")} fill="none" stroke={BALANCE} strokeWidth="2" />
@@ -151,7 +234,16 @@ export function BalanceChart({ months }: { months: TrendMonth[] }) {
                   <title>{`${MONTHS[m.month - 1]} ${m.year} balance ${formatMoney(m.balance)}`}</title>
                 </circle>
               )}
-              <text x={x} y={H - 8} textAnchor="middle" fontSize="11" fill="#8a93a3">
+              <rect
+                x={x - slot / 2}
+                y={PAD.top - 6}
+                width={slot}
+                height={plotH + 6}
+                fill="transparent"
+                onMouseEnter={() => setHover(i)}
+                onMouseLeave={() => setHover(null)}
+              />
+              <text x={x} y={H - 8} textAnchor="middle" fontSize="11" fill="#98a1b0">
                 {MONTHS[m.month - 1]}
               </text>
             </g>

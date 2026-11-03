@@ -151,6 +151,42 @@ def logout(
     response.delete_cookie(settings.cookie_name, path="/")
 
 
+class PasswordChange(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=1, max_length=256)
+
+
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+def change_password(
+    body: PasswordChange,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> None:
+    """Change the password; every other signed-in session is ended."""
+    user = session.user
+    if not verify_password(user.password_hash, body.current_password):
+        _audit(db, user.id, "user.password_change_failed")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Current password is incorrect")
+    if len(body.new_password) < settings.min_password_length:
+        raise HTTPException(
+            422, f"Password must be at least {settings.min_password_length} characters"
+        )
+    if body.new_password == body.current_password:
+        raise HTTPException(422, "The new password must differ from the current one")
+
+    user.password_hash = hash_password(body.new_password)
+    others = db.scalars(
+        select(UserSession).where(
+            UserSession.user_id == user.id, UserSession.id != session.id
+        )
+    ).all()
+    for other in others:
+        db.delete(other)
+    db.commit()
+    _audit(db, user.id, "user.password_changed", sessions_ended=len(others))
+
+
 @router.get("/me", response_model=Me)
 def me(session: UserSession = Depends(get_current_session)) -> Me:
     return Me(username=session.user.username, csrf_token=session.csrf_token)

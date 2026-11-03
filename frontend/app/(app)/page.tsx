@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { CardSkeleton, LoadError, RowsSkeleton } from "@/components/states";
 import { BalanceChart, IncomeExpenseChart } from "@/components/TrendCharts";
+import { loadPref, savePref } from "@/lib/prefs";
 import { api, CategoryTotal, Dashboard, Tracker, Totals, Trend } from "@/lib/api";
 import {
   MONTHS,
@@ -192,7 +193,15 @@ export default function DashboardPage() {
 
   useEffect(() => {
     setHidden(loadAmountsHidden());
+    const savedBank = loadPref("dashBank");
+    if (savedBank) setBank(savedBank);
   }, []);
+
+  // A remembered bank filter that no longer exists would leave the dashboard empty with no
+  // control to undo it, so drop it.
+  useEffect(() => {
+    if (bank && dash && !dash.banks.some((b) => b.code === bank)) setBank("");
+  }, [bank, dash]);
 
   const bankParam = bank ? `&bank_code=${encodeURIComponent(bank)}` : "";
 
@@ -348,7 +357,13 @@ export default function DashboardPage() {
         <h1 className="text-xl font-semibold">Dashboard</h1>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           {(dash?.banks.length ?? 0) > 1 && (
-            <select aria-label="Bank" value={bank} onChange={(e) => setBank(e.target.value)} className={select}>
+            <select aria-label="Bank" value={bank}
+              onChange={(e) => {
+                setBank(e.target.value);
+                savePref("dashBank", e.target.value);
+              }}
+              className={select}
+            >
               <option value="">All banks</option>
               {dash?.banks.map((b) => (
                 <option key={b.code} value={b.code}>
@@ -411,13 +426,56 @@ export default function DashboardPage() {
           </div>
         )
       ) : !dash.has_data ? (
-        <p className="text-sm text-slate-600">
-          No reconciled statements yet.{" "}
-          <Link href="/upload" className="underline">
-            Upload one
-          </Link>{" "}
-          to see your balance and spending.
-        </p>
+        <section className="max-w-2xl rounded border border-slate-200 bg-surface p-5">
+          <h2 className="mb-1 font-medium">Welcome — let’s get your first statement in</h2>
+          <p className="mb-4 text-sm text-slate-600">
+            Nothing to show yet. Everything stays on this computer.
+          </p>
+          <ol className="space-y-3 text-sm">
+            {[
+              {
+                title: "Upload a bank statement PDF",
+                text: "Drag a statement onto the Upload page. It is read and checked against its balances.",
+                href: "/upload",
+                action: "Go to Upload",
+                done: false,
+              },
+              {
+                title: "Review anything that did not reconcile",
+                text:
+                  dash.needs_review > 0
+                    ? `${dash.needs_review} statement${dash.needs_review === 1 ? "" : "s"} waiting for your review.`
+                    : "Statements whose balances do not add up wait for your check before they count.",
+                href: "/upload",
+                action: "Open statements",
+                done: false,
+              },
+              {
+                title: "Sort transactions into categories",
+                text: "Rules and the local AI suggest categories; you confirm or correct them.",
+                href: "/categories",
+                action: "Open Categories",
+                done: false,
+              },
+            ].map((step, index) => (
+              <li key={step.title} className="flex gap-3">
+                <span
+                  aria-hidden="true"
+                  className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-accent text-xs font-bold text-accent-fg"
+                >
+                  {index + 1}
+                </span>
+                <div>
+                  <p className="font-medium">{step.title}</p>
+                  <p className="text-slate-600">{step.text}</p>
+                  <Link href={step.href} className="text-accent underline">
+                    {step.action}
+                  </Link>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </section>
       ) : (
         <>
           {/* Current finance */}

@@ -29,6 +29,7 @@ const NAV: { heading: string; items: { href: string; label: string; icon: string
     items: [
       { href: "/categories", label: "Categories", icon: "🏷️" },
       { href: "/system", label: "System", icon: "🖥️" },
+      { href: "/settings", label: "Settings", icon: "⚙️" },
     ],
   },
 ];
@@ -138,6 +139,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <ConfirmProvider>
     <div className="min-h-screen">
+      <a
+        href="#main"
+        className="sr-only z-50 rounded bg-accent px-3 py-2 text-sm font-medium text-accent-fg focus:not-sr-only focus:fixed focus:left-3 focus:top-3"
+      >
+        Skip to content
+      </a>
       {/* Top bar */}
       <header className="fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-3 border-b border-slate-200 bg-chrome px-4">
         <button
@@ -169,9 +176,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         <div className="ml-auto flex items-center gap-2">
           <Link
-            href="/system"
-            aria-label="System settings"
-            title="System"
+            href="/settings"
+            aria-label="Settings"
+            title="Settings"
             className="rounded p-2 text-lg leading-none hover:bg-slate-100"
           >
             ⚙️
@@ -294,7 +301,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             rule-based categorization continue to work; AI features resume when the model is back.
           </div>
         )}
-        <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">{children}</main>
+        <main id="main" tabIndex={-1} className="mx-auto outline-none max-w-6xl px-4 py-6 sm:px-6">{children}</main>
       </div>
     </div>
     </ConfirmProvider>

@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { Pager } from "@/components/Pager";
 import { LoadError, RowsSkeleton } from "@/components/states";
+import { TransactionDetail } from "@/components/TransactionDetail";
+import { loadPref, savePref } from "@/lib/prefs";
 import {
   api,
   ApiError,
@@ -38,7 +40,9 @@ function SortHeader({
   order,
   onSort,
   align = "left",
+  className = "",
 }: {
+  className?: string;
   label: string;
   column: SortKey;
   sort: SortKey;
@@ -49,7 +53,7 @@ function SortHeader({
   const active = sort === column;
   return (
     <th
-      className={`px-3 py-2 font-medium ${align === "right" ? "text-right" : ""}`}
+      className={`px-3 py-2 font-medium ${align === "right" ? "text-right" : ""} ${className}`}
       aria-sort={active ? (order === "asc" ? "ascending" : "descending") : "none"}
     >
       <button
@@ -101,6 +105,7 @@ export default function TransactionsPage() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkCategory, setBulkCategory] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const [detail, setDetail] = useState<TransactionItem | null>(null);
 
   const [banks, setBanks] = useState<Bank[]>([]);
   const [years, setYears] = useState<number[]>([]);
@@ -109,6 +114,14 @@ export default function TransactionsPage() {
 
   // Links from the dashboard arrive with filters in the address (?year=&month=&category_id=...).
   useEffect(() => {
+    // Remembered choices first; anything in the address then wins.
+    const size = Number(loadPref("txPageSize"));
+    if (PAGE_SIZES.includes(size)) setPageSize(size);
+    const savedSort = loadPref("txSort");
+    if (savedSort && ["date", "amount", "description", "bank", "category"].includes(savedSort)) {
+      setSort(savedSort as SortKey);
+      setOrder(loadPref("txOrder") === "asc" ? "asc" : "desc");
+    }
     const p = new URLSearchParams(window.location.search);
     if (p.get("bank_code")) setBank(p.get("bank_code")!);
     if (p.get("year")) setYear(p.get("year")!);
@@ -219,12 +232,16 @@ export default function TransactionsPage() {
   };
 
   function sortBy(column: SortKey) {
-    if (column === sort) setOrder(order === "asc" ? "desc" : "asc");
+    let nextOrder: "asc" | "desc";
+    if (column === sort) nextOrder = order === "asc" ? "desc" : "asc";
     else {
-      setSort(column);
       // Text reads naturally A to Z; dates and amounts start with the newest or largest.
-      setOrder(column === "description" || column === "bank" || column === "category" ? "asc" : "desc");
+      nextOrder = column === "description" || column === "bank" || column === "category" ? "asc" : "desc";
     }
+    setSort(column);
+    setOrder(nextOrder);
+    savePref("txSort", column);
+    savePref("txOrder", nextOrder);
     setPage(1);
   }
 
@@ -481,6 +498,7 @@ export default function TransactionsPage() {
               value={pageSize}
               onChange={(e) => {
                 setPageSize(Number(e.target.value));
+                savePref("txPageSize", e.target.value);
                 setPage(1);
               }}
               className={select}
@@ -512,13 +530,13 @@ export default function TransactionsPage() {
                   />
                 </th>
                 <SortHeader label="Date" column="date" sort={sort} order={order} onSort={sortBy} />
-                <SortHeader label="Bank" column="bank" sort={sort} order={order} onSort={sortBy} />
+                <SortHeader label="Bank" column="bank" sort={sort} order={order} onSort={sortBy} className="hidden md:table-cell" />
                 <SortHeader label="Description" column="description" sort={sort} order={order} onSort={sortBy} />
                 <SortHeader label="Category" column="category" sort={sort} order={order} onSort={sortBy} />
                 <SortHeader label="Debit" column="amount" sort={sort} order={order} onSort={sortBy} align="right" />
                 <SortHeader label="Credit" column="amount" sort={sort} order={order} onSort={sortBy} align="right" />
-                <th className="px-3 py-2 text-right font-medium">Balance</th>
-                <th className="px-3 py-2 font-medium">Statement</th>
+                <th className="hidden px-3 py-2 text-right font-medium lg:table-cell">Balance</th>
+                <th className="hidden px-3 py-2 font-medium lg:table-cell">Statement</th>
               </tr>
             </thead>
             <tbody>
@@ -538,7 +556,7 @@ export default function TransactionsPage() {
                     />
                   </td>
                   <td className="whitespace-nowrap px-3 py-2">{formatDate(t.transaction_date)}</td>
-                  <td className="whitespace-nowrap px-3 py-2">
+                  <td className="hidden whitespace-nowrap px-3 py-2 md:table-cell">
                     <span
                       className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium uppercase"
                       title={t.bank_name ?? undefined}
@@ -554,7 +572,13 @@ export default function TransactionsPage() {
                     )}
                   </td>
                   <td className="px-3 py-2">
-                    {t.description}
+                    <button
+                      onClick={() => setDetail(t)}
+                      title="Show details"
+                      className="text-left hover:underline"
+                    >
+                      {t.description}
+                    </button>
                     {t.is_duplicate && (
                       <span
                         className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600"
@@ -596,8 +620,10 @@ export default function TransactionsPage() {
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatAmount(t.debit)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatAmount(t.credit)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatMoney(t.running_balance)}</td>
-                  <td className="whitespace-nowrap px-3 py-2">
+                  <td className="hidden px-3 py-2 text-right tabular-nums lg:table-cell">
+                    {formatMoney(t.running_balance)}
+                  </td>
+                  <td className="hidden whitespace-nowrap px-3 py-2 lg:table-cell">
                     <Link href={`/documents/${t.document_id}`} className="underline">
                       #{t.document_id}
                     </Link>{" "}
@@ -613,6 +639,8 @@ export default function TransactionsPage() {
       <div className="flex justify-end">
         <Pager page={page} pages={pages} onChange={setPage} />
       </div>
+
+      {detail && <TransactionDetail transaction={detail} onClose={() => setDetail(null)} />}
     </section>
   );
 }

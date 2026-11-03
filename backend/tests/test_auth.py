@@ -97,3 +97,52 @@ def test_protected_routes_reject_anonymous(client):
     assert client.get("/api/auth/me").status_code == 401
     assert client.get("/api/system/hardware").status_code == 401
     assert client.get("/api/system/ollama").status_code == 401
+
+
+def test_change_password_flow(logged_in):
+    client, csrf = logged_in
+    headers = {"X-CSRF-Token": csrf}
+    new_password = PASSWORD + "-changed"
+
+    wrong = client.post(
+        "/api/auth/change-password",
+        json={"current_password": "nope", "new_password": new_password},
+        headers=headers,
+    )
+    assert wrong.status_code == 403
+
+    short = client.post(
+        "/api/auth/change-password",
+        json={"current_password": PASSWORD, "new_password": "short"},
+        headers=headers,
+    )
+    assert short.status_code == 422
+
+    same = client.post(
+        "/api/auth/change-password",
+        json={"current_password": PASSWORD, "new_password": PASSWORD},
+        headers=headers,
+    )
+    assert same.status_code == 422
+
+    ok = client.post(
+        "/api/auth/change-password",
+        json={"current_password": PASSWORD, "new_password": new_password},
+        headers=headers,
+    )
+    assert ok.status_code == 204
+    assert client.get("/api/auth/me").status_code == 200  # this session stays signed in
+
+    client.post("/api/auth/logout", headers=headers)
+    old = client.post("/api/auth/login", json={"username": "owner", "password": PASSWORD})
+    assert old.status_code == 401
+    new = client.post("/api/auth/login", json={"username": "owner", "password": new_password})
+    assert new.status_code == 200
+
+
+def test_change_password_requires_csrf_and_login(logged_in):
+    client, _ = logged_in
+    body = {"current_password": PASSWORD, "new_password": PASSWORD + "-x"}
+    assert client.post("/api/auth/change-password", json=body).status_code == 403
+    client.cookies.clear()
+    assert client.post("/api/auth/change-password", json=body).status_code == 401
