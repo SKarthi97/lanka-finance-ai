@@ -51,7 +51,8 @@ Worker -> claims job (FOR UPDATE SKIP LOCKED) -> inspect_document -> status "ins
   `scanned` or `empty` and stores counts only (no page text). This feeds the OCR decision
   in a later phase.
 - **Bank:** the upload form offers Bank of Ceylon (`boc`), Hatton National Bank (`hnb`,
-  migration 0008) and Commercial Bank (`commercial`, migration 0009). If no bank is sent, the adapter registry picks the best-scoring adapter
+  migration 0008), Commercial Bank (`commercial`, migration 0009) and Sampath Bank (`sampath`,
+  migration 0010). If no bank is sent, the adapter registry picks the best-scoring adapter
   (auto-detection).
 
 ## Operations
@@ -63,7 +64,7 @@ docker compose exec postgres psql -U lanka -d lanka -c "select id,type,status,at
 
 ## Known limits
 
-- Extraction supports BOC, HNB and Commercial (other banks come one at a time).
+- Extraction supports BOC, HNB, Commercial and Sampath (other banks come one at a time).
 - A statement can be re-processed in place (`POST /api/documents/{id}/reprocess`) only while
   its stored file exists (`needs_review`, `failed`, or `RETAIN_DOCUMENTS=true`); otherwise
   delete it and upload again.

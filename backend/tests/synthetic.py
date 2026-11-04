@@ -144,6 +144,39 @@ def commercial_lines(
     return lines
 
 
+def sampath_lines(
+    opening: tuple[str, str] | None = ("22DEC2025", "1,000.00Cr"),
+    rows: list[tuple] | None = None,
+    closing: tuple[str, str] | None = ("31Dec2025", "900.00Cr"),
+    totals: tuple[str, str] | None = None,
+    period: tuple[str, str] | None = ("22-12-2025", "31-12-2025"),
+    account: str | None = None,
+    page_number: int = 1,
+) -> list[str]:
+    """One table row per line, like the text PyMuPDF extracts from a Sampath statement.
+
+    rows: (ddMonyy, branch, particulars, amount, balance), balance with its Cr/Dr suffix.
+    The logo, title and column headings are images on real statements.
+    """
+    if rows is None:
+        rows = [("23Dec25", "NSC", "SYNTHETIC SHOP", "100.00", "900.00Cr")]
+    lines = ["TO:", "MR. SYNTHETIC PERSON", "NO 1 TEST ROAD", "TEST CITY"]
+    lines.append(f"{account} LKR PAGE_NO: {page_number}" if account else f"LKR PAGE_NO: {page_number}")
+    if period:
+        lines.append(f"FOR THE PERIOD : {period[0]} to {period[1]} DATE: 01-01-2026")
+    if opening:
+        lines.append(f"{opening[0]} {opening[1]}")
+    for day, branch, particulars, amount, balance in rows:
+        lines.append(f"{day} {branch} {particulars} {amount} {balance}")
+    if closing:
+        lines.append(f"{closing[0]} C/F {closing[1]}")
+    lines.append("-" * 60)
+    if totals:
+        lines.append(f"TOTAL : {totals[0]} {totals[1]}")
+        lines.append("-" * 60)
+    return lines
+
+
 def commercial_quarterly_lines(
     opening: tuple[str, str] | None = ("30/06/26", "1,000.00"),
     rows: list[tuple] | None = None,

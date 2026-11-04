@@ -1,6 +1,7 @@
-# Transaction Extraction (Phase 2: BOC, HNB, Commercial)
+# Transaction Extraction (Phase 2: BOC, HNB, Commercial, Sampath)
 
-Status: implemented for Bank of Ceylon, Hatton National Bank (HNB) and Commercial Bank. Follows
+Status: implemented for Bank of Ceylon, Hatton National Bank (HNB), Commercial Bank and
+Sampath Bank. Follows
 `00-architecture.md` sections 5, 7, 8.
 
 ## Privacy rule for development
@@ -117,6 +118,28 @@ adapter:
   the totals are never read as rows.
 - "Commercial Bank **Of Ceylon** PLC" contains "Bank Of Ceylon", so BOC returns 0 for any
   statement naming Commercial Bank.
+
+### Sampath Bank (`adapters/sampath.py`)
+
+Written from the masked layout of one real single-page statement; the tests use synthetic
+statements. One table row per line (the logo, title and column headings are images):
+
+- Header: `<account number> LKR PAGE_NO: n` and `FOR THE PERIOD : dd-mm-yyyy to dd-mm-yyyy
+  DATE: dd-mm-yyyy`. The statement date is the **end of the period**; the printed DATE is the
+  day it was produced and is ignored. Without a period the statement fails with
+  `statement_date_not_found`.
+- A transaction row is `ddMonyy`, a branch code (dropped from the description), the
+  particulars, **one amount** and the balance with a `Cr`/`Dr` suffix (`Dr` is negative).
+  Debit vs credit comes from the balance movement, as for BOC.
+- Opening and closing rows have a 4-digit year: `22DEC2025 <balance>` (no label; a zero
+  balance has no suffix) and `31Dec2025 C/F <balance>`. A later `B/F` must equal the previous
+  balance (`carry_forward_mismatch`).
+- `TOTAL : <debits> <credits>` is read as declared totals (no item counts), informational.
+  The two figures are taken in column order; the verify output shows whether they match.
+- Lines without a date are ignored (particulars are cut to the column width, not wrapped).
+- The bank name is an image, so the bank is recognised from the period line, `PAGE_NO:` and the
+  row shapes (and from the word "Sampath" if it is in the text layer).
+- Not yet seen on real data: multi-page statements, `B/F` rows, `Dr` balances, wrapped text.
 
 Unverified until checked on real statements: multi-page layout (repeated headers, carry
 forward rows), wrapped descriptions, current and other account types, the account number
@@ -273,7 +296,7 @@ categories in 0007).
   hand on that statement. Preserving manual categories across re-extraction is not done yet.
 - Rows with no account number are matched per bank, so duplicate detection across such
   statements is weaker.
-- BOC, HNB and Commercial are supported; other banks come one at a time with real samples.
+- BOC, HNB, Commercial and Sampath are supported; other banks come one at a time with real samples.
 
 Categorisation and duplicate removal are implemented: see `04-categorization.md` and the
 "Duplicate transactions" section above.

@@ -13,6 +13,7 @@ const BANKS = [
   { code: "boc", name: "Bank of Ceylon" },
   { code: "hnb", name: "Hatton National Bank" },
   { code: "commercial", name: "Commercial Bank" },
+  { code: "sampath", name: "Sampath Bank" },
 ];
 
 function formatSize(bytes: number) {

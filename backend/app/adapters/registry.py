@@ -2,10 +2,12 @@ from app.adapters.base import BankAdapter
 from app.adapters.boc import BocAdapter
 from app.adapters.commercial import CommercialAdapter
 from app.adapters.hnb import HnbAdapter
+from app.adapters.sampath import SampathAdapter
 
-# One adapter per bank, added one at a time (Sampath later).
+# One adapter per bank, added one at a time with a real sample layout.
 ADAPTERS: dict[str, BankAdapter] = {
-    adapter.code: adapter for adapter in (BocAdapter(), HnbAdapter(), CommercialAdapter())
+    adapter.code: adapter
+    for adapter in (BocAdapter(), HnbAdapter(), CommercialAdapter(), SampathAdapter())
 }
 
 IDENTIFY_THRESHOLD = 0.5

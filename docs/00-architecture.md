@@ -229,6 +229,7 @@ Migrations 0001 to 0007 (`backend/alembic/versions`).
 | Ollama health and hardware screen | Done | System page |
 | HNB adapter (savings statements; written from one real layout, multi-page unverified) | Done, needs real-statement checks | `03-extraction.md` |
 | Commercial Bank adapter (written from one quiet-account layout; ordinary debits/credits and multi-page unverified) | Done, needs real-statement checks | `03-extraction.md` |
+| Sampath Bank adapter (savings statement; written from one real layout, multi-page unverified) | Done, needs real-statement checks | `03-extraction.md` |
 | Commercial, Sampath adapters; generic adapter; LLM extraction fallback; OCR | Not started | |
 | Offline compose override, GPU override, healthchecks for worker and frontend | Not started | |
 | Backup and restore scripts, encrypted archives | Not started | |
