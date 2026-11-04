@@ -355,3 +355,52 @@ export type Suggestions = { total: number; confident_threshold: number; groups: 
 
 export type Notice = { key: string; kind: string; severity: "warn" | "info"; text: string; href: string };
 export type Notifications = { count: number; items: Notice[] };
+
+// --- budgets, recurring, saved views -------------------------------------------------------
+
+export type BudgetLine = {
+  category_id: number;
+  category_name: string;
+  limit: string;
+  spent: string;
+  remaining: string;
+  percent: number;
+  state: "under" | "near" | "over";
+};
+
+export type Budgets = {
+  year: number;
+  month: number;
+  items: BudgetLine[];
+  total_limit: string;
+  total_spent: string;
+  over: number;
+};
+
+export type RecurringItem = {
+  stem: string;
+  direction: "expense" | "income";
+  cadence: string;
+  count: number;
+  typical_amount: string;
+  last_date: string;
+  next_expected: string;
+  state: "upcoming" | "due" | "overdue" | "ended";
+  category_name: string | null;
+  monthly_equivalent: string;
+};
+
+export type RecurringList = { items: RecurringItem[]; monthly_expense: string; monthly_income: string };
+
+export type ViewFilters = {
+  q?: string | null;
+  bank_code?: string | null;
+  category_id?: number | null;
+  uncategorised?: boolean;
+  year?: number | null;
+  month?: number | null;
+  flagged?: boolean;
+  duplicates?: "hide" | "show" | "only";
+};
+
+export type SavedViewItem = { id: number; name: string; filters: ViewFilters };

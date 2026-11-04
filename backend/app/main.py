@@ -4,13 +4,17 @@ from fastapi import FastAPI
 
 from app.routers import (
     auth,
+    budgets,
     categories,
     documents,
     notifications,
     overview,
+    recurring,
+    reports,
     system,
     transactions,
     transfers,
+    views,
 )
 
 # Application loggers (uvicorn only configures its own). Messages carry codes and ids,
@@ -35,3 +39,7 @@ app.include_router(overview.router)
 app.include_router(categories.router)
 app.include_router(transfers.router)
 app.include_router(notifications.router)
+app.include_router(budgets.router)
+app.include_router(recurring.router)
+app.include_router(views.router)
+app.include_router(reports.router)

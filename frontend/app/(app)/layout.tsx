@@ -23,12 +23,15 @@ const NAV: { heading: string; items: { href: string; label: string; icon: string
       { href: "/", label: "Dashboard", icon: "🏠" },
       { href: "/transactions", label: "Transactions", icon: "🧾" },
       { href: "/upload", label: "Upload", icon: "📥" },
+      { href: "/reports", label: "Report", icon: "📄" },
     ],
   },
   {
     heading: "Manage",
     items: [
       { href: "/categories", label: "Categories", icon: "🏷️" },
+      { href: "/budgets", label: "Budgets", icon: "🎯" },
+      { href: "/recurring", label: "Recurring", icon: "🔁" },
       { href: "/system", label: "System", icon: "🖥️" },
       { href: "/settings", label: "Settings", icon: "⚙️" },
     ],
@@ -147,7 +150,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         Skip to content
       </a>
       {/* Top bar */}
-      <header className="fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-3 border-b border-slate-200 bg-chrome px-4">
+      <header className="fixed inset-x-0 top-0 z-30 flex h-14 print:hidden items-center gap-3 border-b border-slate-200 bg-chrome px-4">
         <button
           onClick={() => setDrawer((open) => !open)}
           aria-label={drawer ? "Close menu" : "Open menu"}
@@ -197,7 +200,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Sidebar: always visible on large screens, a slide-in drawer on small ones */}
       <aside
-        className={`fixed bottom-0 left-0 top-14 z-20 w-64 overflow-y-auto overflow-x-hidden border-r border-slate-200 bg-rail px-3 py-4 transition-all duration-200 lg:translate-x-0 ${
+        className={`fixed bottom-0 left-0 top-14 z-20 print:hidden w-64 overflow-y-auto overflow-x-hidden border-r border-slate-200 bg-rail px-3 py-4 transition-all duration-200 lg:translate-x-0 ${
           collapsed ? "lg:w-16 lg:px-2" : ""
         } ${drawer ? "translate-x-0" : "-translate-x-full"}`}
       >
@@ -288,7 +291,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </nav>
       </aside>
 
-      <div className={`pt-14 transition-all duration-200 ${collapsed ? "lg:pl-16" : "lg:pl-64"}`}>
+      <div className={`pt-14 print:pl-0 print:pt-0 transition-all duration-200 ${collapsed ? "lg:pl-16" : "lg:pl-64"}`}>
         {aiUnavailable && (
           <div role="status" className="mx-4 mt-4 rounded bg-amber-50 px-4 py-3 text-sm text-amber-800">
             Local AI is unavailable ({ollama?.error ?? "unknown reason"}). Extraction and

@@ -377,3 +377,39 @@ class TransferRejection(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow
     )
+
+
+class Budget(Base):
+    """A monthly spending limit for one category."""
+
+    __tablename__ = "budgets"
+    __table_args__ = (UniqueConstraint("user_id", "category_id", name="uq_budgets_category"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    category_id: Mapped[int] = mapped_column(
+        ForeignKey("categories.id", ondelete="CASCADE")
+    )
+    monthly_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+
+
+class SavedView(Base):
+    """A named set of Transactions filters. Holds filter values only, never rows."""
+
+    __tablename__ = "saved_views"
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_saved_views_name"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(64))
+    filters: Mapped[dict] = mapped_column(JsonType)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { Pager } from "@/components/Pager";
 import { LoadError, RowsSkeleton } from "@/components/states";
+import { SavedViews } from "@/components/SavedViews";
 import { TransactionDetail } from "@/components/TransactionDetail";
 import { loadPref, savePref } from "@/lib/prefs";
 import {
@@ -16,6 +17,7 @@ import {
   Tracker,
   TransactionItem,
   TransactionList,
+  ViewFilters,
 } from "@/lib/api";
 import {
   MONTHS_LONG,
@@ -311,6 +313,29 @@ export default function TransactionsPage() {
   if (showDuplicates)
     chips.push({ key: "dups", label: "Including duplicates", remove: () => filter(setShowDuplicates)(false) });
 
+  // The filters as a saved view holds them, and the way back from one.
+  const currentFilters: ViewFilters = {
+    q: query || null,
+    bank_code: bank || null,
+    category_id: categoryFilter && categoryFilter !== "none" ? Number(categoryFilter) : null,
+    uncategorised: categoryFilter === "none",
+    year: year ? Number(year) : null,
+    month: year && month ? Number(month) : null,
+    flagged: onlyFlagged,
+    duplicates: showDuplicates ? "show" : "hide",
+  };
+
+  function applyView(f: ViewFilters) {
+    setSearch(f.q ?? "");
+    setBank(f.bank_code ?? "");
+    setCategoryFilter(f.uncategorised ? "none" : f.category_id ? String(f.category_id) : "");
+    setYear(f.year ? String(f.year) : "");
+    setMonth(f.year && f.month ? String(f.month) : "");
+    setOnlyFlagged(!!f.flagged);
+    setShowDuplicates(f.duplicates === "show" || f.duplicates === "only");
+    setPage(1);
+  }
+
   function clearAll() {
     setSearch("");
     setBank("");
@@ -428,6 +453,8 @@ export default function TransactionsPage() {
           Show duplicates
         </label>
       </div>
+
+      <SavedViews current={currentFilters} hasFilters={chips.length > 0} onApply={applyView} />
 
       {chips.length > 0 && (
         <div className="flex flex-wrap items-center gap-2" aria-label="Active filters">
