@@ -239,8 +239,9 @@ the output before sharing it.
   month, so the server's timezone never decides). Transfers between your own accounts are
   left out (see `04-categorization.md`); uncategorised rows count by direction. Statements
   needing review and duplicate rows are excluded.
-- **Tracker (on the Upload page, not the dashboard):** one row per bank/account, one column
-  per month. The dashboard's attention panel still counts missing months and links to it. A statement counts for the
+- **Tracker (Statements tab of the dashboard, following the bank chip):** one row per
+  bank/account, one column per month. The attention panel counts missing months and balance
+  breaks (next section) and links to it. A statement counts for the
   month its period **ends** in and for every month **wholly inside** its period. So a
   31 Oct - 30 Nov statement is the November statement only (a missing October stays
   visible), while a multi-year statement fills every month it spans. The month containing
@@ -252,6 +253,41 @@ the output before sharing it.
   accounts at one bank would share a row until the account number is found. The UI says
   "account not detected" on those rows instead of hiding the fact.
 - Income and expense leave out transfers between your own accounts; see `04-categorization.md`.
+
+## Checks across statements and banks
+
+These work on statements that are already extracted, so they apply to every bank the same way.
+All of them are exact arithmetic on stored values.
+
+- **Missing months** (`services/coverage.py`): per bank account, a month between the first and
+  last statement that no statement covers is shown as `✗` on the tracker and counted in the
+  dashboard's attention panel (all years, not only the one selected). Months before the first
+  or after the last statement are not "missing". Statements still needing review count here
+  because they are on the tracker.
+- **Balance breaks**: when one statement ends where the next begins (up to a day apart), the
+  first one's closing balance must equal the second one's opening balance. When it does not,
+  transactions are missing between them or a statement was read wrongly. Only reconciled or
+  accepted statements take part, and only when the account number is known (several accounts
+  can hide under "account not detected"). The tracker lists each break with both balances and
+  links to both statements.
+- **Own-account transfers** (`services/transfers.py`, `routers/transfers.py`, the Transfers
+  tab on the Categories page): a debit and a credit of **exactly the same amount** in
+  **different accounts**, within **3 days**, matched one-to-one (closest dates first). A pair
+  is flagged "ambiguous" when another row could equally be the other half. Rows you set a
+  non-transfer category on yourself are never offered, and a pair where both halves are
+  already transfers is skipped. Nothing changes until you confirm. Confirming files both rows
+  under the Transfers category as a manual choice (so it survives re-extraction, see
+  `06-backup-and-restore.md`) and learns no rule, because a description alone does not make
+  something a transfer. "Not a transfer" is remembered in `transfer_rejections` (migration
+  0011) by row hash, so it also survives re-extraction. The dashboard links to the tab while
+  suggestions are waiting.
+- **Per-bank split:** with "All banks" selected, the month and year income/expense cards show
+  a table per bank (same rules as the cards: transfers and repeated rows left out). It adds
+  up to the cards; it is hidden when one bank is selected.
+- **Account history:** each account card shows up to 12 month-end balances (the running
+  balance of its last transaction in each month, carried through months without
+  transactions), a small line of them and the change in the latest month. Balances shown are
+  still the closing balance of the latest statement.
 
 ## Data model additions (migration 0004)
 
@@ -269,11 +305,13 @@ categories in 0007).
 | `GET /api/transactions` | each row carries `bank_code`, `bank_name`, `account_last4`; filters: `document_id`, `bank_code`, `year`, `month`, `flagged`, `validation_status`, `q`, `category_id`, `uncategorised`, duplicates; `sort` / `order`; `limit` (max 500) / `offset` |
 | `GET /api/transactions/export.csv` | the same filters as a CSV file |
 | `GET /api/banks` | supported banks (for filters) |
-| `GET /api/dashboard?year=&month=&bank_code=` | current balances, income/expense for the month and the year, spending by category, `needs_review` count |
+| `GET /api/dashboard?year=&month=&bank_code=` | current balances (with month-end `history` and `change`), income/expense for the month and the year (with `*_by_bank` when no bank is selected), spending by category, `coverage` (missing months, balance breaks), `transfer_suggestions`, `needs_review` count |
 | `GET /api/dashboard/trend?year=&month=&months=&bank_code=` | monthly income, expense and balance series |
 | `DELETE /api/documents/{id}` | delete a statement and its rows |
 | `GET /api/documents` | list statements with status |
-| `GET /api/tracker?year=` | bank/account x month grid of uploaded statements |
+| `GET /api/tracker?year=` | bank/account x month grid of uploaded statements, plus `gap_months`, `gap_total` and `breaks` per row |
+| `GET /api/transfers/suggestions` | possible transfers between your own accounts |
+| `POST /api/transfers/confirm`, `/reject` | `{out_id, in_id}`: file both halves as Transfers, or remember it is not a transfer |
 | `POST /api/documents/{id}/accept` | accept a `needs_review` statement |
 | `POST /api/documents/{id}/reprocess` | run extraction again on the stored original (needs the file; replaces the old rows) |
 | `GET /api/documents/{id}/pages/{n}/image` | page PNG of the original; 404 `file_not_retained` once deleted |

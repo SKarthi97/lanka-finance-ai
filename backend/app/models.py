@@ -354,3 +354,26 @@ class ModelRun(Base):
     duration_ms: Mapped[int] = mapped_column(Integer)
     valid_json: Mapped[bool] = mapped_column(Boolean)
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class TransferRejection(Base):
+    """A pair of rows you said are NOT a transfer between your own accounts.
+
+    Stored by row hash (not row id) so it still holds after a statement is extracted again.
+    `hash_a` is always the smaller hash of the pair.
+    """
+
+    __tablename__ = "transfer_rejections"
+    __table_args__ = (
+        UniqueConstraint("user_id", "hash_a", "hash_b", name="uq_transfer_rejections_pair"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    hash_a: Mapped[str] = mapped_column(String(64))
+    hash_b: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )

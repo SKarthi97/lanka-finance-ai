@@ -211,14 +211,29 @@ export type TrendMonth = {
 
 export type Trend = { months: TrendMonth[] };
 
+export type BankTotal = {
+  bank_code: string | null;
+  bank_name: string | null;
+  income: string;
+  expense: string;
+  net: string;
+  transactions: number;
+};
+
+export type AccountBalance = {
+  bank_code: string | null;
+  bank_name: string | null;
+  account_last4: string | null;
+  balance: string;
+  as_of: string;
+  history: { year: number; month: number; balance: string }[];
+  change: string | null;
+  change_year: number | null;
+  change_month: number | null;
+};
+
 export type Dashboard = {
-  balances: {
-    bank_code: string | null;
-    bank_name: string | null;
-    account_last4: string | null;
-    balance: string;
-    as_of: string;
-  }[];
+  balances: AccountBalance[];
   total_balance: string;
   as_of: string | null;
   month: Totals;
@@ -230,6 +245,10 @@ export type Dashboard = {
   year: Totals;
   month_by_category: CategoryTotal[];
   year_by_category: CategoryTotal[];
+  month_by_bank: BankTotal[];
+  year_by_bank: BankTotal[];
+  coverage: { gap_months: number; balance_breaks: number };
+  transfer_suggestions: number;
   needs_review: number;
   has_data: boolean;
   years: number[];
@@ -243,8 +262,35 @@ export type Tracker = {
     bank_name: string | null;
     account_last4: string | null;
     cells: Record<string, { status: "ok" | "review"; document_id: number }>;
+    gap_months: number[];
+    gap_total: number;
+    breaks: {
+      from_document_id: number;
+      to_document_id: number;
+      on: string;
+      expected: string;
+      found: string;
+    }[];
   }[];
 };
+
+export type TransferSide = {
+  id: number;
+  transaction_date: string;
+  description: string;
+  bank_code: string | null;
+  account_last4: string | null;
+};
+
+export type TransferPair = {
+  out: TransferSide;
+  into: TransferSide;
+  amount: string;
+  days_apart: number;
+  ambiguous: boolean;
+};
+
+export type TransferSuggestions = { total: number; window_days: number; items: TransferPair[] };
 
 // --- categories ---------------------------------------------------------------------------
 

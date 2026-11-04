@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.deps import get_current_session
 from app.models import Bank, Category, Document, Transaction, UserSession
+from app.services import transfers
+from app.services.coverage import account_coverage, covered_months
 from app.services.extraction import ACTIVE_STATUSES
 
 router = APIRouter(prefix="/api", tags=["overview"])
@@ -21,27 +23,7 @@ def _dec(value) -> Decimal:
     return Decimal(str(value)).quantize(CENTS)
 
 
-def _covered_months(period_start: date | None, period_end: date) -> set[tuple[int, int]]:
-    """(year, month) pairs a statement counts for.
-
-    The month its period ends in, plus every month that lies wholly inside the period.
-    A monthly statement 31 Oct - 30 Nov therefore counts for November only, so a missing
-    October statement stays visible; a multi-year statement counts for every month it spans.
-    """
-    covered = {(period_end.year, period_end.month)}
-    if period_start is None:
-        return covered
-
-    year, month = period_start.year, period_start.month
-    for _ in range(1200):  # 100 years of months; guards against bad data
-        first = date(year, month, 1)
-        next_first = date(year + (month == 12), month % 12 + 1, 1)
-        if next_first - timedelta(days=1) > period_end:
-            break
-        if first > period_start:
-            covered.add((year, month))
-        year, month = next_first.year, next_first.month
-    return covered
+_covered_months = covered_months  # kept under the old name for existing callers
 
 
 def _transaction_years(db: Session, user_id: int, statuses: tuple[str, ...]) -> set[int]:
@@ -83,12 +65,24 @@ def list_banks(
 # --- dashboard -----------------------------------------------------------------
 
 
+class HistoryPoint(BaseModel):
+    year: int
+    month: int
+    balance: Decimal  # the account's balance at the end of that month
+
+
 class BalanceOut(BaseModel):
     bank_code: str | None
     bank_name: str | None
     account_last4: str | None
     balance: Decimal
     as_of: date
+    # Up to 12 month-end balances ending with the account's latest month with transactions.
+    history: list[HistoryPoint] = []
+    # Latest month's balance minus the month before; None when there is only one month.
+    change: Decimal | None = None
+    change_year: int | None = None
+    change_month: int | None = None
 
 
 class Totals(BaseModel):
@@ -108,6 +102,20 @@ class CategoryTotal(BaseModel):
     income: Decimal
     expense: Decimal
     transactions: int
+
+
+class BankTotal(BaseModel):
+    bank_code: str | None
+    bank_name: str | None
+    income: Decimal
+    expense: Decimal
+    net: Decimal
+    transactions: int
+
+
+class CoverageOut(BaseModel):
+    gap_months: int  # months with no statement, between an account's first and last statement
+    balance_breaks: int  # places where one statement's closing balance is not the next one's opening
 
 
 class TopExpense(BaseModel):
@@ -131,6 +139,10 @@ class DashboardOut(BaseModel):
     ai_unsure: int  # AI suggestions below the confidence threshold, waiting for you
     month_by_category: list[CategoryTotal]
     year_by_category: list[CategoryTotal]
+    month_by_bank: list[BankTotal]  # empty when a single bank is selected
+    year_by_bank: list[BankTotal]
+    coverage: CoverageOut
+    transfer_suggestions: int  # possible own-account transfers waiting for you
     needs_review: int
     has_data: bool
     years: list[int]  # every year with transactions, for the period selector
@@ -211,6 +223,95 @@ def _totals(
     return totals, by_category
 
 
+def _bank_split(
+    db: Session, included, start: date, end: date, categories: dict[int, Category]
+) -> list[BankTotal]:
+    """Income and expense per bank, with the same rules as `_totals` (transfers and repeated
+    rows left out; uncategorised counted by direction)."""
+    rows = db.execute(
+        select(
+            Transaction.bank_id,
+            Transaction.category_id,
+            func.coalesce(func.sum(Transaction.credit), 0),
+            func.coalesce(func.sum(Transaction.debit), 0),
+            func.count(),
+        )
+        .where(
+            Transaction.document_id.in_(included),
+            Transaction.is_duplicate.is_(False),
+            Transaction.transaction_date >= start,
+            Transaction.transaction_date < end,
+        )
+        .group_by(Transaction.bank_id, Transaction.category_id)
+    ).all()
+    banks = {b.id: b for b in db.scalars(select(Bank))}
+
+    zero = Decimal("0.00")
+    totals: dict[int | None, list] = {}
+    for bank_id, category_id, credit, debit, n in rows:
+        entry = totals.setdefault(bank_id, [zero, zero, 0])
+        entry[2] += n
+        category = categories.get(category_id)
+        if category is not None and category.kind == "transfer":
+            continue
+        entry[0] += _dec(credit)
+        entry[1] += _dec(debit)
+
+    out = [
+        BankTotal(
+            bank_code=banks[bank_id].code if bank_id in banks else None,
+            bank_name=banks[bank_id].name if bank_id in banks else None,
+            income=income,
+            expense=expense,
+            net=income - expense,
+            transactions=count,
+        )
+        for bank_id, (income, expense, count) in totals.items()
+    ]
+    out.sort(key=lambda b: b.bank_name or "")
+    return out
+
+
+HISTORY_MONTHS = 12
+
+
+def _account_history(
+    db: Session, included, bank_id: int | None
+) -> dict[tuple, list[HistoryPoint]]:
+    """Month-end balance per (bank, account): the running balance of its last transaction in
+    each month, carried forward through months without transactions."""
+    conditions = [Transaction.document_id.in_(included), Transaction.is_duplicate.is_(False)]
+    if bank_id is not None:
+        conditions.append(Transaction.bank_id == bank_id)
+    rows = db.execute(
+        select(
+            Transaction.bank_id,
+            Transaction.account_id,
+            Transaction.transaction_date,
+            Transaction.running_balance,
+        )
+        .where(*conditions)
+        .order_by(Transaction.transaction_date, Transaction.document_id, Transaction.seq)
+    ).all()
+
+    month_end: dict[tuple, dict[tuple[int, int], Decimal]] = {}
+    for bank_key, account_key, when, balance in rows:
+        month_end.setdefault((bank_key, account_key), {})[(when.year, when.month)] = _dec(balance)
+
+    history: dict[tuple, list[HistoryPoint]] = {}
+    for key, months in month_end.items():
+        first, last = min(months), max(months)
+        points: list[HistoryPoint] = []
+        year, month = first
+        carried = months[first]
+        while (year, month) <= last:
+            carried = months.get((year, month), carried)
+            points.append(HistoryPoint(year=year, month=month, balance=carried))
+            year, month = year + (month == 12), month % 12 + 1
+        history[key] = points[-HISTORY_MONTHS:]
+    return history
+
+
 @router.get("/dashboard", response_model=DashboardOut)
 def dashboard(
     year: int = Query(default=None, ge=2000, le=2100),
@@ -257,16 +358,24 @@ def dashboard(
             continue
         latest[(doc.bank_id, doc.account_id)] = doc
 
-    balances = [
-        BalanceOut(
-            bank_code=doc.bank.code if doc.bank else None,
-            bank_name=doc.bank.name if doc.bank else None,
-            account_last4=doc.account.account_number_last4 if doc.account else None,
-            balance=doc.closing_balance,
-            as_of=doc.period_end,
+    history = _account_history(db, included, bank_id)
+    balances = []
+    for key, doc in latest.items():
+        points = history.get(key, [])
+        change = points[-1].balance - points[-2].balance if len(points) >= 2 else None
+        balances.append(
+            BalanceOut(
+                bank_code=doc.bank.code if doc.bank else None,
+                bank_name=doc.bank.name if doc.bank else None,
+                account_last4=doc.account.account_number_last4 if doc.account else None,
+                balance=doc.closing_balance,
+                as_of=doc.period_end,
+                history=points,
+                change=change,
+                change_year=points[-1].year if change is not None else None,
+                change_month=points[-1].month if change is not None else None,
+            )
         )
-        for doc in latest.values()
-    ]
     balances.sort(key=lambda b: (b.bank_name or "", b.account_last4 or ""))
 
     month_start = date(year, month, 1)
@@ -284,6 +393,15 @@ def dashboard(
         db, included, date(year, 1, 1), date(year + 1, 1, 1), categories, bank_id
     )
     top_expenses = _top_expenses(db, included, month_start, month_end, categories, bank_id)
+    month_by_bank = (
+        [] if bank_id is not None else _bank_split(db, included, month_start, month_end, categories)
+    )
+    year_by_bank = (
+        []
+        if bank_id is not None
+        else _bank_split(db, included, date(year, 1, 1), date(year + 1, 1, 1), categories)
+    )
+    report = list(account_coverage(db, session.user_id).values())
 
     needs_review = db.scalar(
         select(func.count())
@@ -314,6 +432,13 @@ def dashboard(
         year=year_totals,
         month_by_category=month_by_category,
         year_by_category=year_by_category,
+        month_by_bank=month_by_bank,
+        year_by_bank=year_by_bank,
+        coverage=CoverageOut(
+            gap_months=sum(len(c.gap_months) for c in report),
+            balance_breaks=sum(len(c.breaks) for c in report),
+        ),
+        transfer_suggestions=len(transfers.find_pairs(db, session.user_id)),
         needs_review=needs_review or 0,
         has_data=bool(statements),
         years=sorted(_transaction_years(db, session.user_id, ACTIVE_STATUSES) | {year}),
@@ -489,11 +614,22 @@ class TrackerCell(BaseModel):
     document_id: int
 
 
+class TrackerBreak(BaseModel):
+    from_document_id: int
+    to_document_id: int
+    on: date
+    expected: Decimal  # closing balance of the earlier statement
+    found: Decimal  # opening balance of the later statement
+
+
 class TrackerRow(BaseModel):
     bank_code: str | None
     bank_name: str | None
     account_last4: str | None
     cells: dict[int, TrackerCell]  # month number -> cell
+    gap_months: list[int] = []  # months of the selected year missing between two statements
+    gap_total: int = 0  # missing months in every year
+    breaks: list[TrackerBreak] = []  # balance breaks between consecutive statements
 
 
 class TrackerOut(BaseModel):
@@ -555,6 +691,24 @@ def tracker(
             # A clean statement beats one needing review; otherwise the latest wins.
             if existing is None or existing.status == "review" or status == "ok":
                 row.cells[cell_month] = TrackerCell(status=status, document_id=doc.id)
+
+    report = account_coverage(db, session.user_id)
+    for key, row in rows.items():
+        coverage = report.get(key)
+        if coverage is None:
+            continue
+        row.gap_months = [m for y, m in coverage.gap_months if y == year]
+        row.gap_total = len(coverage.gap_months)
+        row.breaks = [
+            TrackerBreak(
+                from_document_id=b.from_document_id,
+                to_document_id=b.to_document_id,
+                on=b.on,
+                expected=b.expected,
+                found=b.found,
+            )
+            for b in coverage.breaks
+        ]
 
     ordered = sorted(rows.values(), key=lambda r: (r.bank_name or "", r.account_last4 or ""))
     return TrackerOut(year=year, years=years, rows=ordered)

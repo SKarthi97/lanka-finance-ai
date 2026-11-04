@@ -45,10 +45,10 @@ remembered; arrow keys move between tabs):
 | Tab | Contents |
 |---|---|
 | Overview | "Needs your attention", four summary cards for the latest month with data, the month-end balance chart for the chosen year |
-| Accounts | One card per account: balance, as-of date and age, "out of date" flag (over 45 days), share of the total, "Show only this bank" and a link to its transactions |
-| Cash flow | Year and month pickers, income/expense and balance charts (click a month to select it), month and year income/expense/net cards |
+| Accounts | One card per account: balance, month-end line (up to 12 months) and the change in the latest month, as-of date and age, "out of date" flag (over 45 days), share of the total, "Show only this bank" and a link to its transactions |
+| Cash flow | Year and month pickers, income/expense and balance charts (click a month to select it), month and year income/expense/net cards, each with a per-bank table when "All banks" is chosen |
 | Spending | Year and month pickers, spending by category for the month (largest expenses beneath) and for the year |
-| Statements | Statement problems (not reconciled, stale, gaps), the statement tracker, a link to Upload; the tab shows a badge with the number needing review |
+| Statements | Statement problems (not reconciled, stale, missing months, balance breaks), the statement tracker, a link to Upload; the tab shows a badge with the number needing review |
 
 Headings state the period explicitly (for example "March 2025" or "2025 totals") so a card can
 never be mistaken for a different period. The statement tracker follows the bank chip (only that bank's accounts are listed); it is no longer on the Upload page.
@@ -71,6 +71,9 @@ Charts have hover tooltips (keyboard focusable), hidden data tables for screen r
 
 ## Categories page
 
+- Transfers tab: possible transfers between your own accounts (same amount, different accounts,
+  within 3 days). "Yes, my own accounts" files both halves as Transfers; "Not a transfer" is
+  remembered. The dashboard links here (`?tab=transfers`). See `03-extraction.md`.
 - Review tab: uncategorised groups, biggest first. An "AI hunch" button appears beside a group
   when the model had a low-confidence guess; one click applies it.
 - AI suggestions tab: what the model applied, with **Accept confident** for those at or above

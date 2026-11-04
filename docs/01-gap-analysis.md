@@ -107,7 +107,9 @@ or update the architecture to match what exists.
 | 3 Additional banks | HNB, Commercial and Sampath added (each from one real layout) |
 | 3 OCR | Open |
 | 3 Account entity, filters, search, delete statement, bulk categorise, rule from correction | Resolved |
-| 3 Budgets, recurring, anomalies, forecasts, backup, assistant | Open |
+| 3 Transfer matching (cross-account, 3 days) | Resolved: suggested, confirmed by you |
+| 3 Budgets, recurring, anomalies, forecasts, assistant | Open |
+| 3 Backup | Resolved: see `06-backup-and-restore.md` |
 | 4 Tests, schema versioning, logging, Dockerfile | Resolved (pytest suite, Alembic, logging, Dockerfiles); CI and lockfiles open |
 | 5 Authentication, plaintext database, PDF password handling | Resolved: auth, password never stored. Database encryption at rest is not done |
 | 5 Descriptions sent to the model | Mitigated: only description stems go to the local model, never amounts or account numbers |
@@ -118,6 +120,8 @@ or update the architecture to match what exists.
 - Offline compose override and healthchecks for every service.
 - (Done, see `06-backup-and-restore.md`: backups and restore, manual categories kept on
   re-extract, duplicate matching within one bank when no account number is found.)
+- (Done, see `03-extraction.md` "Checks across statements and banks": own-account transfer
+  matching, missing-month and balance-break checks, per-bank split, account history.)
 - Confirm the HNB adapter on real multi-page statements; then Commercial, Sampath, a generic
   adapter and OCR.
 - CI and dependency lockfiles.

@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { CardSkeleton, LoadError, RowsSkeleton } from "@/components/states";
+import { Sparkline } from "@/components/Sparkline";
 import { StatementTracker } from "@/components/StatementTracker";
 import { BalanceChart, IncomeExpenseChart } from "@/components/TrendCharts";
 import { loadPref, savePref } from "@/lib/prefs";
-import { api, CategoryTotal, Dashboard, Tracker, Totals, Trend } from "@/lib/api";
+import { api, BankTotal, CategoryTotal, Dashboard, Tracker, Totals, Trend } from "@/lib/api";
 import {
   MONTHS,
   MONTHS_LONG,
@@ -116,6 +117,7 @@ function PeriodCards({
   previousLabel,
   filter,
   action,
+  byBank,
   level = 2,
   show = "both",
   children,
@@ -123,6 +125,7 @@ function PeriodCards({
   show?: "totals" | "categories" | "both"; // which parts of the block to draw
   level?: 2 | 3; // heading level: 3 when this block sits inside another section
   children?: React.ReactNode; // extra content shown after the category bars
+  byBank?: BankTotal[]; // income and expense per bank; drawn only when there is more than one
   title: string;
   totals: Totals | undefined;
   byCategory: CategoryTotal[] | undefined;
@@ -163,6 +166,34 @@ function PeriodCards({
           }
         />
       </div>
+
+      {byBank && byBank.length > 1 && (
+        <div className="mt-2 overflow-x-auto rounded border border-slate-200 bg-surface">
+          <table className="w-full text-sm">
+            <caption className="sr-only">Income and expense by bank</caption>
+            <thead className="border-b border-slate-200 text-left text-xs text-slate-500">
+              <tr>
+                <th className="px-3 py-1.5 font-medium">Bank</th>
+                <th className="px-3 py-1.5 text-right font-medium">Income</th>
+                <th className="px-3 py-1.5 text-right font-medium">Expense</th>
+                <th className="px-3 py-1.5 text-right font-medium">Net</th>
+              </tr>
+            </thead>
+            <tbody>
+              {byBank.map((b) => (
+                <tr key={b.bank_code ?? "none"} className="border-b border-slate-100 last:border-0">
+                  <td className="px-3 py-1.5">{b.bank_name ?? "Unknown bank"}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{formatMoney(b.income)}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{formatMoney(b.expense)}</td>
+                  <td className={`px-3 py-1.5 text-right tabular-nums ${Number(b.net) < 0 ? "text-red-700" : ""}`}>
+                    {formatMoney(b.net)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {totals && transfers > 0 && (
         <p className="mt-2 text-xs text-slate-500">
@@ -322,15 +353,10 @@ export default function DashboardPage() {
     : null;
   const stale = staleDays !== null && staleDays > 45;
 
-  // Months without a statement between a row's first and last statement (this tracker year).
-  let missingMonths = 0;
-  for (const row of tracker?.rows ?? []) {
-    const have = Object.keys(row.cells).map(Number);
-    if (have.length === 0) continue;
-    const lo = Math.min(...have);
-    const hi = Math.max(...have);
-    for (let m = lo; m <= hi; m++) if (!row.cells[String(m)]) missingMonths++;
-  }
+  // Months without a statement between an account's first and last statement (every year), and
+  // places where one statement's closing balance is not the next one's opening.
+  const missingMonths = dash?.coverage.gap_months ?? 0;
+  const balanceBreaks = dash?.coverage.balance_breaks ?? 0;
 
   const attention: { key: string; text: React.ReactNode }[] = [];
   if (dash && dash.needs_review > 0)
@@ -377,10 +403,36 @@ export default function DashboardPage() {
       key: "gaps",
       text: (
         <>
-          {missingMonths} month{missingMonths === 1 ? "" : "s"} without a statement in {tracker?.year},
-          between statements you have.{" "}
-          <Link href="/upload#tracker" className="underline">
+          {missingMonths} month{missingMonths === 1 ? "" : "s"} without a statement, between statements
+          you have.{" "}
+          <button onClick={() => chooseTab("statements")} className="underline">
             See the tracker
+          </button>
+        </>
+      ),
+    });
+  if (balanceBreaks > 0)
+    attention.push({
+      key: "breaks",
+      text: (
+        <>
+          {balanceBreaks} place{balanceBreaks === 1 ? "" : "s"} where a statement does not start from the
+          previous one’s closing balance, so some transactions may be missing.{" "}
+          <button onClick={() => chooseTab("statements")} className="underline">
+            See where
+          </button>
+        </>
+      ),
+    });
+  if (dash && dash.transfer_suggestions > 0)
+    attention.push({
+      key: "transfers",
+      text: (
+        <>
+          {dash.transfer_suggestions} possible transfer{dash.transfer_suggestions === 1 ? "" : "s"} between
+          your own accounts, counted as income and expense until you confirm.{" "}
+          <Link href="/categories?tab=transfers" className="underline">
+            Review
           </Link>
         </>
       ),
@@ -685,11 +737,25 @@ export default function DashboardPage() {
                             </span>
                           )}
                         </div>
-                        <div className="mt-2 text-xl font-semibold tabular-nums">{formatMoney(b.balance)}</div>
+                        <div className="mt-2 flex items-end justify-between gap-2">
+                          <div className="text-xl font-semibold tabular-nums">{formatMoney(b.balance)}</div>
+                          <Sparkline
+                            values={b.history.map((p) => Number(p.balance))}
+                            label={`Month-end balance, last ${b.history.length} months`}
+                          />
+                        </div>
                         <div className="text-xs text-slate-500">
                           As of {formatDate(b.as_of)}
                           {days !== null ? ` (${days} days ago)` : ""}
                         </div>
+                        {b.change !== null && b.change_month !== null && (
+                          <div
+                            className={`mt-1 text-xs tabular-nums ${Number(b.change) < 0 ? "text-red-700" : Number(b.change) > 0 ? "text-green-700" : "text-slate-500"}`}
+                          >
+                            {Number(b.change) > 0 ? "▲" : Number(b.change) < 0 ? "▼" : "•"} {formatMoney(b.change)} in{" "}
+                            {MONTHS_LONG[b.change_month - 1]}
+                          </div>
+                        )}
                         <div className="mt-2 h-1.5 rounded bg-slate-100" aria-hidden="true">
                           <div className="h-1.5 rounded bg-accent" style={{ width: `${Math.max(share, share > 0 ? 1 : 0)}%` }} />
                         </div>
@@ -759,6 +825,7 @@ export default function DashboardPage() {
                   title={monthTitle}
                   totals={dash.month}
                   byCategory={dash.month_by_category}
+                  byBank={dash.month_by_bank}
                   previous={dash.previous_month}
                   previousLabel={previousLabel}
                   filter={monthFilter}
@@ -769,6 +836,7 @@ export default function DashboardPage() {
                   title={yearTitle}
                   totals={dash.year}
                   byCategory={dash.year_by_category}
+                  byBank={dash.year_by_bank}
                   filter={yearFilter}
                 />
                 <p className="text-xs text-slate-500">
@@ -826,7 +894,7 @@ export default function DashboardPage() {
 
             {tab === "statements" && (
               <>
-                {attentionList(attention.filter((a) => ["review", "stale", "gaps"].includes(a.key)))}
+                {attentionList(attention.filter((a) => ["review", "stale", "gaps", "breaks"].includes(a.key)))}
                 <StatementTracker bank={bank} />
                 <p className="text-sm">
                   <Link href="/upload" className="text-accent underline">

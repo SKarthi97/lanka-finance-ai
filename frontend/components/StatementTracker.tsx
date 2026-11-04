@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { api, Tracker } from "@/lib/api";
-import { MONTHS, NO_ACCOUNT_HINT } from "@/lib/format";
+import { MONTHS, NO_ACCOUNT_HINT, formatDate, formatMoney } from "@/lib/format";
 
 const select = "rounded border border-slate-300 bg-surface px-2 py-1 text-sm";
 
@@ -104,6 +104,14 @@ export function StatementTracker({ refreshKey = "", bank = "" }: { refreshKey?: 
                           >
                             {cell.status === "ok" ? "✓" : "!"}
                           </Link>
+                        ) : row.gap_months.includes(i + 1) ? (
+                          <span
+                            className="font-semibold text-red-600"
+                            title={`${name}: no statement, between two statements you have`}
+                            aria-label={`${name} ${tracker.year}: missing`}
+                          >
+                            ✗
+                          </span>
                         ) : (
                           <span
                             className={future ? "text-slate-200" : "text-slate-300"}
@@ -121,8 +129,32 @@ export function StatementTracker({ refreshKey = "", bank = "" }: { refreshKey?: 
           </table>
         </div>
       )}
+      {rows.some((r) => r.breaks.length > 0) && (
+        <ul className="mt-2 space-y-1 text-sm text-amber-900">
+          {rows.flatMap((row) =>
+            row.breaks.map((b) => (
+              <li
+                key={`${b.from_document_id}-${b.to_document_id}`}
+                className="rounded border border-l-4 border-amber-200 border-l-amber-400 bg-amber-50 px-3 py-2"
+              >
+                <span className="font-medium uppercase">{row.bank_code ?? "?"}</span>
+                {row.account_last4 ? ` •••• ${row.account_last4}` : ""}: the statement that begins{" "}
+                {formatDate(b.on)} opens at {formatMoney(b.found)}, but the one before it closed at{" "}
+                {formatMoney(b.expected)}.{" "}
+                <Link href={`/documents/${b.from_document_id}`} className="underline">
+                  Earlier
+                </Link>{" "}
+                ·{" "}
+                <Link href={`/documents/${b.to_document_id}`} className="underline">
+                  Later
+                </Link>
+              </li>
+            )),
+          )}
+        </ul>
+      )}
       <p className="mt-2 text-xs text-slate-500">
-        ✓ statement uploaded and reconciled · ! needs review · · no statement. A statement counts
+        ✓ statement uploaded and reconciled · ! needs review · ✗ missing between two statements · · no statement. A statement counts
         for the month its period ends in and for every month wholly inside its period, so a long
         statement fills each month it spans.
       </p>
