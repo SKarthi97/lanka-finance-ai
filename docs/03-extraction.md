@@ -1,6 +1,7 @@
-# Transaction Extraction (Phase 2: BOC)
+# Transaction Extraction (Phase 2: BOC, HNB)
 
-Status: implemented for Bank of Ceylon. Follows `00-architecture.md` sections 5, 7, 8.
+Status: implemented for Bank of Ceylon and Hatton National Bank (HNB). Follows
+`00-architecture.md` sections 5, 7, 8.
 
 ## Privacy rule for development
 
@@ -55,6 +56,33 @@ otherwise, which blocks reconciliation because a row may be missing). Lines that
 page 1's header (names, addresses, titles) on later pages are dropped so they cannot
 leak into the previous row's description, and a row whose amounts fall on the next page
 stays one row.
+
+### HNB (`adapters/hnb.py`)
+
+Written from the layout of one real single-page savings statement, seen only as a masked
+shape; the tests use synthetic statements. What the text layer holds:
+
+- One table row per line: `dd.mm.yy`, an optional reference (letters + digits, dropped from
+  the description), the particulars, **one amount**, the balance. Two-digit years, so no year
+  inference is needed.
+- Opening balance: the first `B/F` row (`01.10.26 B/F <balance>`); its date is the period
+  start. A later page's `B/F` must equal the previous balance (`carry_forward_mismatch`),
+  and `C/F` rows are skipped.
+- Closing balance and statement date: the line `dd-mm-yyyy <balance>` ("BALANCE AS AT DATE").
+  Without it the statement fails with `statement_date_not_found`.
+- Totals line `<debits> <credits>` (amounts only, no item counts) is read as declared totals
+  and compared like BOC's, informational only.
+- A line without a date after a row, on the same page, is a wrapped description. Header text
+  at the top of a later page and the footer ("HNB is a member of ...") are never attached.
+- The column headings and the TOTAL / BALANCE AS AT DATE labels are images, so the bank is
+  recognised from the footer wording and the row structure. Debit vs credit comes from the
+  balance movement, as for BOC.
+- Account number: a standalone 9 to 16 digit number in the header above the first row
+  (best effort; the "ACCOUNT NO" label is an image). Stored only as last 4 + fingerprint.
+
+Unverified until checked on real statements: multi-page layout (repeated headers, carry
+forward rows), wrapped descriptions, current and other account types, the account number
+position. Run the verify tool (below) and share only its redacted output.
 
 ## Validation (deterministic, `services/validation.py`)
 
@@ -207,7 +235,7 @@ categories in 0007).
   hand on that statement. Preserving manual categories across re-extraction is not done yet.
 - Rows with no account number are matched per bank, so duplicate detection across such
   statements is weaker.
-- Only BOC is supported; HNB and others come one at a time with real samples.
+- BOC and HNB are supported; other banks come one at a time with real samples.
 
 Categorisation and duplicate removal are implemented: see `04-categorization.md` and the
 "Duplicate transactions" section above.

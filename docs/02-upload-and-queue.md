@@ -50,8 +50,9 @@ Worker -> claims job (FOR UPDATE SKIP LOCKED) -> inspect_document -> status "ins
 - **First job type, `inspect_document`:** classifies each page as `text`, `mixed`,
   `scanned` or `empty` and stores counts only (no page text). This feeds the OCR decision
   in a later phase.
-- **Bank:** the upload form offers Bank of Ceylon (`boc`). If no bank is sent, the adapter
-  registry picks the best-scoring adapter (auto-detection).
+- **Bank:** the upload form offers Bank of Ceylon (`boc`) and Hatton National Bank (`hnb`,
+  migration 0008). If no bank is sent, the adapter registry picks the best-scoring adapter
+  (auto-detection).
 
 ## Operations
 
@@ -62,7 +63,7 @@ docker compose exec postgres psql -U lanka -d lanka -c "select id,type,status,at
 
 ## Known limits
 
-- Extraction supports BOC only (HNB and other banks come one at a time).
+- Extraction supports BOC and HNB (other banks come one at a time).
 - A statement can be re-processed in place (`POST /api/documents/{id}/reprocess`) only while
   its stored file exists (`needs_review`, `failed`, or `RETAIN_DOCUMENTS=true`); otherwise
   delete it and upload again.

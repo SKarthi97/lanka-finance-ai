@@ -9,7 +9,11 @@ import { api, ApiError, DocumentItem } from "@/lib/api";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ACTIVE_STATUSES, explainError } from "@/lib/format";
 
-const BANKS = [{ code: "boc", name: "Bank of Ceylon" }];
+const BANKS = [
+  { code: "", name: "Detect automatically (recommended)" },
+  { code: "boc", name: "Bank of Ceylon" },
+  { code: "hnb", name: "Hatton National Bank" },
+];
 
 function formatSize(bytes: number) {
   return bytes >= 1024 * 1024
@@ -21,7 +25,7 @@ export default function UploadPage() {
   const confirm = useConfirm();
   const fileInput = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
-  const [bank, setBank] = useState("boc");
+  const [bank, setBank] = useState(""); // "" = let the app recognise the bank
   const [password, setPassword] = useState("");
   const [needsPassword, setNeedsPassword] = useState(false);
   const [message, setMessage] = useState<{ kind: "error" | "ok" | "info"; text: string } | null>(null);
@@ -106,7 +110,7 @@ export default function UploadPage() {
 
     const form = new FormData();
     form.append("file", file);
-    form.append("bank_code", bank);
+    if (bank) form.append("bank_code", bank);
     if (needsPassword && password) form.append("password", password);
 
     try {

@@ -59,6 +59,47 @@ def boc_lines(
     return lines
 
 
+def hnb_lines(
+    opening: tuple[str, str] | None = ("01.10.26", "1,000.00"),
+    rows: list[tuple] | None = None,
+    closing: tuple[str, str] | None = ("31-10-2026", "900.00"),
+    totals: tuple[str, str] | None = None,
+    account: str | None = None,
+    page_number: int = 1,
+    footer: bool = True,
+) -> list[str]:
+    """One table row per line, like the text PyMuPDF extracts from an HNB statement.
+
+    rows: (dd.mm.yy, reference or "", description, amount, balance); a description may be a
+    list of lines (wrapped). The column headings and TOTAL labels are images on real
+    statements, so they are not in the text.
+    """
+    if rows is None:
+        rows = [("15.10.26", "SD100001", "SYNTHETIC SHOP PURCHASE", "100.00", "900.00")]
+
+    lines = [str(page_number), "MR. SYNTHETIC PERSON", "NO 1 TEST ROAD COLOMBO"]
+    lines.append(f"TEST CITY {account}" if account else "TEST CITY")
+    lines.append("LKR")
+    if opening:
+        lines.append(f"{opening[0]} B/F {opening[1]}")
+    for day, ref, description, amount, balance in rows:
+        parts = [description] if isinstance(description, str) else list(description)
+        # The amounts share the row's first line; a wrapped description continues below it.
+        first = " ".join(filter(None, [day, ref, parts[0], amount, balance]))
+        lines.append(first)
+        lines += parts[1:]
+    if totals:
+        lines.append(f"{totals[0]} {totals[1]}")
+    if closing:
+        lines.append(f"{closing[0]} {closing[1]}")
+    if footer:
+        lines += [
+            "HNB is a member of the SL Deposit Insurance Scheme operating under CBSL.",
+            "This cover will apply for eligible deposits up to Rs.1.1 Mn. per depositor.",
+        ]
+    return lines
+
+
 def to_pages(lines: list[str]) -> list[str]:
     return ["\n".join(lines)]
 

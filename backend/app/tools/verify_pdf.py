@@ -31,6 +31,11 @@ KEEP_WORDS = {
     "PARTICULARS", "PAYMENTS", "RECEIPTS", "BALANCE", "B/F", "C/F", "TOTAL",
     "DEPOSITS", "WITHDRAWALS", "UNREALIZED", "CHEQUES", "DATE", "DATE:",
     "ACCOUNT", "A/C", "NO", "NO.", "PAGE", "OF", "STATEMENT", "BANK", "CEYLON",
+    # Generic column and marker wording used by other banks (HNB and others).
+    "DEBIT", "CREDIT", "DR", "CR", "DESCRIPTION", "NARRATION", "REFERENCE", "REF",
+    "VALUE", "OPENING", "CLOSING", "BRANCH", "TRANSACTION", "TRANSACTIONS",
+    "AMOUNT", "FROM", "TO", "PERIOD", "CURRENCY", "LKR", "HNB", "HATTON", "NATIONAL",
+    "CARRIED", "BROUGHT", "FORWARD", "SUMMARY", "ITEMS",
 }  # fmt: skip
 
 

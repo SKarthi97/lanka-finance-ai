@@ -104,7 +104,8 @@ or update the architecture to match what exists.
 | 2.6 Year inference | Resolved for BOC: resolved from the end, `date_sequence` check |
 | 2.7 Money as floats | Resolved: `NUMERIC(18,2)` and `Decimal` |
 | 2.8 Page breaks, repeated headers | Resolved for BOC; unverified for other banks |
-| 3 Additional banks, OCR | Open |
+| 3 Additional banks | HNB added; Commercial and Sampath open |
+| 3 OCR | Open |
 | 3 Account entity, filters, search, delete statement, bulk categorise, rule from correction | Resolved |
 | 3 Budgets, recurring, anomalies, forecasts, backup, assistant | Open |
 | 4 Tests, schema versioning, logging, Dockerfile | Resolved (pytest suite, Alembic, logging, Dockerfiles); CI and lockfiles open |
@@ -117,7 +118,8 @@ or update the architecture to match what exists.
 - Keep manual categories when a statement is re-extracted.
 - Duplicate handling when an account number cannot be found.
 - Offline compose override, healthchecks for every service, backups and restore.
-- HNB adapter, then generic adapter and OCR.
+- Confirm the HNB adapter on real multi-page statements; then Commercial, Sampath, a generic
+  adapter and OCR.
 - CI and dependency lockfiles.
 - Review SQL parameter handling for anything built from user text.
 - Forward the remaining `LLM_*` settings through `docker-compose.yml` if they need tuning.

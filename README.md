@@ -4,8 +4,9 @@ A privacy-first, offline bank-statement analyzer for one user. Upload a statemen
 that it reconciles, then explore, categorise and chart your money. Nothing leaves your machine:
 the optional AI is a local model (Ollama) and the app never calls an external service.
 
-Status: Bank of Ceylon (BOC) statements work end to end. HNB and other banks, backups, reports
-and the chat assistant are planned (see `docs/00-architecture.md`, section 12).
+Status: Bank of Ceylon (BOC) and Hatton National Bank (HNB) statements work end to end (HNB is
+checked against one layout so far). Other banks, backups, reports and the chat assistant are
+planned (see `docs/00-architecture.md`, section 12).
 
 ## What it does
 

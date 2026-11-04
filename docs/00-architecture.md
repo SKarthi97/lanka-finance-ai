@@ -227,7 +227,8 @@ Migrations 0001 to 0007 (`backend/alembic/versions`).
 | Categories, rules, learning from corrections, review queue, bulk edit | Done | `04-categorization.md` |
 | Local AI categorisation: name-based replies, confidence tiers, hunches, examples, eval tool | Done | `04-categorization.md` |
 | Ollama health and hardware screen | Done | System page |
-| HNB, Commercial, Sampath adapters; generic adapter; LLM extraction fallback; OCR | Not started | |
+| HNB adapter (savings statements; written from one real layout, multi-page unverified) | Done, needs real-statement checks | `03-extraction.md` |
+| Commercial, Sampath adapters; generic adapter; LLM extraction fallback; OCR | Not started | |
 | Offline compose override, GPU override, healthchecks for worker and frontend | Not started | |
 | Backup and restore scripts, encrypted archives | Not started | |
 | Internal transfer matching, recurring detection, merchants | Not started (`transfers` kind exists on categories only) | |
