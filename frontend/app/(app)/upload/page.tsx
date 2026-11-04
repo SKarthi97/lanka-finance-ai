@@ -12,6 +12,7 @@ const BANKS = [
   { code: "", name: "Detect automatically (recommended)" },
   { code: "boc", name: "Bank of Ceylon" },
   { code: "hnb", name: "Hatton National Bank" },
+  { code: "commercial", name: "Commercial Bank" },
 ];
 
 function formatSize(bytes: number) {

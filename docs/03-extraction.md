@@ -1,6 +1,6 @@
-# Transaction Extraction (Phase 2: BOC, HNB)
+# Transaction Extraction (Phase 2: BOC, HNB, Commercial)
 
-Status: implemented for Bank of Ceylon and Hatton National Bank (HNB). Follows
+Status: implemented for Bank of Ceylon, Hatton National Bank (HNB) and Commercial Bank. Follows
 `00-architecture.md` sections 5, 7, 8.
 
 ## Privacy rule for development
@@ -79,6 +79,44 @@ shape; the tests use synthetic statements. What the text layer holds:
   balance movement, as for BOC.
 - Account number: a standalone 9 to 16 digit number in the header above the first row
   (best effort; the "ACCOUNT NO" label is an image). Stored only as last 4 + fingerprint.
+
+### Commercial Bank (`adapters/commercial.py`)
+
+Written from the masked layout of one real single-page statement (interest and tax rows
+only); the tests use synthetic statements. What the text layer holds, one value per line:
+
+- Header: statement date (`dd/mm/yy`), the currency (`LKR`), the account number, name and
+  address, `PAGE n OF m`. A date directly followed by the currency is a page header, never a row.
+- A row is `dd/mm/yy`, the particulars, **one amount**, then the balance with a `CR` suffix
+  (`DR` is read as negative). Debit vs credit comes from the balance movement, as for BOC.
+- `OPENING BALANCE` and `CLOSING BALANCE` are rows of their own: the opening row's date is the
+  period start, the closing row sets the closing balance. A missing one is reported
+  (`opening_balance_unidentified`, `closing_balance_unidentified`).
+- `TOTAL DEPOSITS - n ITEMS` / `TOTAL WITHDRAWALS - n ITEMS` followed by an amount are read as
+  declared totals (informational). On the sample, the printed item counts did not match the
+  interest rows, which is another reason they never affect `reconciled`.
+- The logo, title, column headings and footer are images, so the bank is recognised from the
+  structure (CR balances, opening/closing rows, the totals lines) and from the words
+  "COMMERCIAL BANK" if the text layer holds them.
+- Not yet seen on real data: ordinary debits and credits, multi-page statements, `DR` balances
+  and carry-forward rows (skipped by name, unconfirmed).
+
+**Quarterly layout (adapter version 2).** A second Commercial layout (a "Statement of
+Account" with branch, posting and effective dates, text column headings) is read by the same
+adapter:
+
+- Dates are `31 Jul 2026`; the posting and effective dates come out as one line or two, and
+  the posting date is used. Balances are bare figures (no `CR`), taken as positive; the last
+  figure on a row is the balance, the other the amount.
+- The opening figure is printed **before** its `BALANCE AS OF dd/mm/yy` label; that date is
+  the period start. The statement date comes from `STATEMENT DATE dd/mm/yy`.
+- `CLOSING BALANCE AS OF dd/mm/yy` is followed by three figures (payments total, receipts
+  total, closing balance), then `TOTAL DEPOSITS n ITEMS` / `TOTAL WITHDRAWALS n ITEMS`
+  (counts only). The two totals are taken in column order; if the verify output shows a
+  swapped total mismatch, that order is wrong. The year-to-date interest and tax notes after
+  the totals are never read as rows.
+- "Commercial Bank **Of Ceylon** PLC" contains "Bank Of Ceylon", so BOC returns 0 for any
+  statement naming Commercial Bank.
 
 Unverified until checked on real statements: multi-page layout (repeated headers, carry
 forward rows), wrapped descriptions, current and other account types, the account number
@@ -235,7 +273,7 @@ categories in 0007).
   hand on that statement. Preserving manual categories across re-extraction is not done yet.
 - Rows with no account number are matched per bank, so duplicate detection across such
   statements is weaker.
-- BOC and HNB are supported; other banks come one at a time with real samples.
+- BOC, HNB and Commercial are supported; other banks come one at a time with real samples.
 
 Categorisation and duplicate removal are implemented: see `04-categorization.md` and the
 "Duplicate transactions" section above.

@@ -100,6 +100,113 @@ def hnb_lines(
     return lines
 
 
+def commercial_lines(
+    opening: tuple[str, str] | None = ("01/10/26", "1,000.00"),
+    rows: list[tuple] | None = None,
+    closing: tuple[str, str] | None = ("31/10/26", "900.00"),
+    totals: tuple[tuple[int, str], tuple[int, str]] | None = None,
+    account: str | None = None,
+    page_number: int = 1,
+    footer: bool = True,
+) -> list[str]:
+    """One value per line, like the text PyMuPDF extracts from a Commercial Bank statement.
+
+    rows: (dd/mm/yy, description, amount, balance) where the balance is "1,000.00 CR" or a
+    bare figure (CR is added). Opening, closing and totals follow the real layout; the logo,
+    headings and footer are images on real statements, so they are not in the text.
+    """
+    if rows is None:
+        rows = [("15/10/26", "SYNTHETIC SHOP PURCHASE", "100.00", "900.00")]
+
+    def balance_text(value: str) -> str:
+        return value if value.upper().endswith(("CR", "DR")) else f"{value} CR"
+
+    lines = ["31/10/26", "LKR"]
+    if account:
+        lines.append(account)
+    lines += ["MR SYNTHETIC PERSON", "NO 1 TEST ROAD", "COLOMBO", f"PAGE {page_number} OF 1"]
+    if opening:
+        lines += [opening[0], "OPENING BALANCE", balance_text(opening[1])]
+    for day, description, amount, balance in rows:
+        lines += [day, description, amount, balance_text(balance)]
+    if closing:
+        lines += [closing[0], "CLOSING BALANCE", balance_text(closing[1])]
+    if totals:
+        (deposit_count, deposit_total), (withdrawal_count, withdrawal_total) = totals
+        lines += [
+            f"TOTAL DEPOSITS - {deposit_count} ITEMS",
+            deposit_total,
+            f"TOTAL WITHDRAWALS - {withdrawal_count} ITEMS",
+            withdrawal_total,
+        ]
+    if footer:
+        lines += ["TELEPHONE NO. 0112 000 000"]
+    return lines
+
+
+def commercial_quarterly_lines(
+    opening: tuple[str, str] | None = ("30/06/26", "1,000.00"),
+    rows: list[tuple] | None = None,
+    closing: tuple[str, str] | None = ("30/09/26", "1,008.00"),
+    totals: tuple[str, str] | None = ("2.00", "10.00"),
+    counts: tuple[int, int] | None = (1, 1),
+    account: str | None = None,
+    one_line_dates: bool = True,
+) -> list[str]:
+    """The quarterly Commercial layout: bare balances, posting + effective dates (on one line
+    or two), the opening figure before its label, and the closing figures before the counts.
+
+    rows: ("31 Jul 2026", description, amount, balance). totals = (payments, receipts).
+    """
+    if rows is None:
+        rows = [
+            ("31 Jul 2026", "SYNTHETIC INTEREST", "10.00", "1,010.00"),
+            ("31 Jul 2026", "SYNTHETIC TAX", "2.00", "1,008.00"),
+        ]
+    lines = [
+        "SYNTHETIC CITY BRANCH",
+        "STATEMENT OF ACCOUNT",
+        "STATEMENT DATE 30/09/26",
+        "In Account With",
+        "Commercial Bank Of Ceylon PLC",
+        "MR SYNTHETIC PERSON",
+        f"ACCOUNT NO {account}" if account else "ACCOUNT NO",
+        "CURRENCY LKR",
+        "DATE",
+        "PARTICULARS",
+        "RECEIPTS",
+        "BALANCE",
+        "PAYMENTS",
+        "DATE",
+    ]
+    if opening:
+        lines += [opening[1], f"BALANCE AS OF {opening[0]}"]
+    for day, description, amount, balance in rows:
+        lines += [f"{day} {day}"] if one_line_dates else [day, day]
+        lines += [description, amount, balance]
+    if closing:
+        lines.append(f"CLOSING BALANCE AS OF {closing[0]}")
+        if totals:
+            lines += [totals[0], totals[1]]
+        lines.append(closing[1])
+    if counts:
+        lines += [f"TOTAL DEPOSITS {counts[0]} ITEMS", f"TOTAL WITHDRAWALS {counts[1]} ITEMS"]
+    lines += [
+        "INTEREST EARNED FOR FINANCIAL YEAR TO",
+        "DATE",
+        "INTEREST WITHHELD FOR FINANCIAL YEAR",
+        "TO DATE",
+        "10.00",
+        "2.00",
+        "* INCLUDES ADVANCE INCOME TAX IN THE",
+        "AMOUNT OF",
+        "2.00",
+        "PAGE 1",
+        "THE ITEMS AND BALANCES ON THIS STATEMENT SHOULD BE VERIFIED",
+    ]
+    return lines
+
+
 def to_pages(lines: list[str]) -> list[str]:
     return ["\n".join(lines)]
 

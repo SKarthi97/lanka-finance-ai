@@ -141,6 +141,9 @@ class BocAdapter:
 
     def identify(self, pages: list[str]) -> float:
         text = "\n".join(pages).upper()
+        # "Commercial Bank Of Ceylon PLC" contains "BANK OF CEYLON" but is another bank.
+        if "COMMERCIAL BANK" in text:
+            return 0.0
         if not all(header in text for header in _REQUIRED_HEADERS):
             return 0.0
         score = 0.5

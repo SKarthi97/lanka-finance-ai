@@ -104,7 +104,7 @@ or update the architecture to match what exists.
 | 2.6 Year inference | Resolved for BOC: resolved from the end, `date_sequence` check |
 | 2.7 Money as floats | Resolved: `NUMERIC(18,2)` and `Decimal` |
 | 2.8 Page breaks, repeated headers | Resolved for BOC; unverified for other banks |
-| 3 Additional banks | HNB added; Commercial and Sampath open |
+| 3 Additional banks | HNB and Commercial added; Sampath open |
 | 3 OCR | Open |
 | 3 Account entity, filters, search, delete statement, bulk categorise, rule from correction | Resolved |
 | 3 Budgets, recurring, anomalies, forecasts, backup, assistant | Open |
