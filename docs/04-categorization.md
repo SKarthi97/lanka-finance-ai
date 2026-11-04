@@ -85,8 +85,49 @@ For transactions the rules leave, the worker asks the local model (Ollama, defau
 - A failed AI pass (Ollama down, model missing) **never changes a statement's status**; the job
   just fails and can be asked again. Turn it off with `LLM_CLASSIFY_ENABLED=false`.
 
-A 1.5B model on CPU makes mistakes. That is why only confident answers apply, why they are
+A small model on CPU makes mistakes. That is why only confident answers apply, why they are
 labelled, and why any rule or your own choice overrides them.
+
+### Which model and thresholds
+
+Measured with the evaluation script on its 41 synthetic descriptions (batch 5, CPU only):
+
+| Model | Answered | Right | Right when confident | Time |
+|---|---|---|---|---|
+| `qwen2.5:1.5b` | 6/41 (the rest null) | 5 | 5/6 | 60 s |
+| `qwen2.5:3b`, numeric ids in the prompt | 30/41 | 18 | 18/29 | 249 s |
+| `qwen2.5:3b`, category names (current) | 36/41 | 32 | 32/36 | 173 s |
+
+Findings: 1.5B is too small for about 20 categories; the closed list of names fixed most of the
+3B model's mix-ups; the model reports 1.00 for almost everything, so **its confidence does not
+separate right from wrong**. Its remaining errors are overlapping categories (groceries versus
+food, fixed deposit versus deposits). Recommended `.env` until your own corrections have taught
+it more:
+
+```
+OLLAMA_MODEL=qwen2.5:3b
+LLM_TIMEOUT_S=300
+LLM_CONFIDENCE_THRESHOLD=1.01   # nothing is auto-applied; every guess is an AI hunch in Review
+```
+
+Compose forwards `OLLAMA_MODEL`, `LLM_CLASSIFY_ENABLED`, `LLM_TIMEOUT_S` (worker) and
+`OLLAMA_TIMEOUT_S` (backend, used by the "ask the AI" button; default 60, too short for 3B),
+and `LLM_CONFIDENCE_THRESHOLD` (worker). `LLM_HINT_THRESHOLD`, `LLM_EXAMPLE_LIMIT`,
+`LLM_AMOUNT_HINTS` and `LLM_CONFIDENT_THRESHOLD` use their defaults unless added to the compose
+`environment` lists. A larger model needs no code change: set `OLLAMA_MODEL`, raise the timeout,
+and re-run the evaluation.
+
+### Evaluating a model
+
+```
+docker compose exec backend python -m app.tools.eval_categorizer qwen2.5:3b --timeout 400 --batch 5 --verbose
+```
+
+Options: `--timeout S` (per call), `--batch N` (descriptions per call), `--verbose` (one line
+per description: expected, model said, confidence). "no reply" means a timeout or unusable
+answer; "null" means the model declined. The set (`app/tools/eval_set.json`) is synthetic, so
+the output is safe to share. Install a model first with `docker compose exec ollama ollama pull
+qwen2.5:3b` and rebuild the backend image after changing the script.
 
 ## Built-in rules
 
@@ -102,17 +143,25 @@ off but not delete it.
 |---|---|
 | `GET/POST /api/categories`, `DELETE /api/categories/{id}` | list, add, delete (custom and unused only) |
 | `GET/POST /api/rules`, `PATCH/DELETE /api/rules/{id}` | list, add, turn on/off, delete (not built-in) |
-| `PUT /api/transactions/{id}/category` | set a category; `create_rule` also learns it |
-| `GET /api/categorization/review` | the review queue |
+| `PUT /api/transactions/{id}/category` | set a category; `create_rule` also learns it; `preview: true` changes nothing and returns `similar_count` |
+| `GET /api/categorization/review` | the review queue; each group may carry `hint_category_id`, `hint_category_name`, `hint_confidence` |
 | `POST /api/categorization/apply` | one category for a whole description group |
 | `POST /api/categorization/reclassify` | re-run the rules on rows not set by hand |
 | `POST /api/categorization/ai`, `GET /api/categorization/status` | ask the AI pass, see its state |
 | `GET /api/transactions?category_id=&uncategorised=&sort=&order=` | filters and ordering (`sort`: date, amount, description, bank, category) |
 | `GET /api/transactions/export.csv` | the same filters as a CSV file (the whole result; cells that start with `=`, `+`, `-` or `@` are neutralised) |
 | `POST /api/transactions/bulk-category` | one category for up to 500 selected transactions (set by you; no rule is learned) |
-| `GET /api/categorization/suggestions` | what the AI applied, grouped by description and category |
+| `GET /api/categorization/suggestions` | what the AI applied, grouped by description and category, plus `confident_threshold` |
 | `POST /api/categorization/suggestions/accept`, `/reject` | accept (makes it your choice and learns a rule) or reject (back to Review) one group |
 | `GET /api/dashboard` | income/expense without transfers, transfers shown separately, spending by category |
+
+## Data model
+
+Migration 0006 adds `categories`, `classification_rules`, `classification_feedback` and the
+`transactions` category columns (`category_id`, `classification_source`,
+`classification_confidence`, `classification_explanation`). Migration 0007 adds
+`transactions.suggested_category_id` (the AI hunch). Sources: `rule`, `user_rule`, `manual`,
+`llm`, `llm_unsure`.
 
 ## Limits
 

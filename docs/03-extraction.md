@@ -147,8 +147,9 @@ the output before sharing it.
 - **Largest expenses:** the top five debits of the month, transfers excluded.
 - **Income / expense:** credits / debits of reconciled or accepted statements whose
   transaction date falls in the chosen month and year (default: the browser's current
-  month, so the server's timezone never decides). Until categories exist (Phase 4) these
-  include transfers and loan payments. Statements needing review are excluded.
+  month, so the server's timezone never decides). Transfers between your own accounts are
+  left out (see `04-categorization.md`); uncategorised rows count by direction. Statements
+  needing review and duplicate rows are excluded.
 - **Tracker (on the Upload page, not the dashboard):** one row per bank/account, one column
   per month. The dashboard's attention panel still counts missing months and links to it. A statement counts for the
   month its period **ends** in and for every month **wholly inside** its period. So a
@@ -168,16 +169,21 @@ the output before sharing it.
 `accounts`; `documents` gains period, balances, adapter, confidence and a `validation`
 JSON (codes, pages and row numbers only); `transactions` holds `NUMERIC(18,2)` money,
 `source_page`, `validation_status` and a `row_hash` (the architecture's dedupe key, used for
-overlap detection in Phase 5).
+overlap detection; duplicate flags arrived in migration 0005, categories in 0006 and AI hint
+categories in 0007).
 
 ## API
 
 | Endpoint | Purpose |
 |---|---|
 | `GET /api/documents/{id}` | status, period, balances, adapter, confidence, checks and issues |
-| `GET /api/transactions` | each row carries `bank_code`, `bank_name`, `account_last4`; filters: `document_id`, `bank_code`, `year`, `month`, `flagged`, `validation_status`, `q`; `limit` (max 500) / `offset` |
+| `GET /api/transactions` | each row carries `bank_code`, `bank_name`, `account_last4`; filters: `document_id`, `bank_code`, `year`, `month`, `flagged`, `validation_status`, `q`, `category_id`, `uncategorised`, duplicates; `sort` / `order`; `limit` (max 500) / `offset` |
+| `GET /api/transactions/export.csv` | the same filters as a CSV file |
 | `GET /api/banks` | supported banks (for filters) |
-| `GET /api/dashboard?year=&month=` | current balances, income/expense for the month and the year, `needs_review` count |
+| `GET /api/dashboard?year=&month=&bank_code=` | current balances, income/expense for the month and the year, spending by category, `needs_review` count |
+| `GET /api/dashboard/trend?year=&month=&months=&bank_code=` | monthly income, expense and balance series |
+| `DELETE /api/documents/{id}` | delete a statement and its rows |
+| `GET /api/documents` | list statements with status |
 | `GET /api/tracker?year=` | bank/account x month grid of uploaded statements |
 | `POST /api/documents/{id}/accept` | accept a `needs_review` statement |
 | `POST /api/documents/{id}/reprocess` | run extraction again on the stored original (needs the file; replaces the old rows) |
@@ -197,5 +203,11 @@ overlap detection in Phase 5).
 
 - Real BOC layout details not covered by the prototype's sample (multi-page, account
   number position) are unverified until checked with the verify tool.
-- Transactions are not categorised yet (Phase 4) and duplicate transactions across
-  overlapping statements are not removed yet (Phase 5).
+- Re-running extraction (`reprocess`) replaces the rows, including categories you set by
+  hand on that statement. Preserving manual categories across re-extraction is not done yet.
+- Rows with no account number are matched per bank, so duplicate detection across such
+  statements is weaker.
+- Only BOC is supported; HNB and others come one at a time with real samples.
+
+Categorisation and duplicate removal are implemented: see `04-categorization.md` and the
+"Duplicate transactions" section above.

@@ -73,7 +73,21 @@ Put real statements under `tests/fixtures/private/` (gitignored, never committed
 
 The frontend binds to `127.0.0.1` by default (`FRONTEND_BIND`). Binding to a LAN address requires an explicit flag; if you do, restrict it with Windows Firewall to trusted hosts.
 
-## 8. Verification checklist
+## 8. Start the application
+
+```powershell
+Copy-Item .env.example .env      # then set POSTGRES_PASSWORD; never commit .env
+docker compose up -d --build
+docker compose --profile setup run --rm ollama-pull    # one-time model download
+```
+
+Open http://127.0.0.1:3000 and create your account. Optional settings in `.env`:
+`OLLAMA_MODEL`, `LLM_TIMEOUT_S`, `LLM_CONFIDENCE_THRESHOLD` (see `04-categorization.md`).
+A 3B model needs about 3 GB of the 5 GB given to the `ollama` container. To start from an empty
+database, remove the `pgdata` volume (`docker compose down`, then
+`docker volume rm lanka-finance-ai_pgdata`); the downloaded models are kept.
+
+## 9. Verification checklist
 
 - [ ] Project at `D:\lanka-finance-ai`, outside OneDrive
 - [ ] `wsl -l -v` shows a WSL 2 distro

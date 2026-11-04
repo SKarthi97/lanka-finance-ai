@@ -63,6 +63,10 @@ docker compose exec postgres psql -U lanka -d lanka -c "select id,type,status,at
 ## Known limits
 
 - Extraction supports BOC only (HNB and other banks come one at a time).
-- Documents can be deleted but not re-processed in place: delete and upload again.
+- A statement can be re-processed in place (`POST /api/documents/{id}/reprocess`) only while
+  its stored file exists (`needs_review`, `failed`, or `RETAIN_DOCUMENTS=true`); otherwise
+  delete it and upload again.
+- A third job type, `classify_llm`, runs the AI categorisation pass after extraction (see
+  `04-categorization.md`). Its failure never changes a statement's status.
 - Next.js may cap request bodies on its `/api` proxy; if large uploads fail at the
   frontend while working directly against the backend, raise the proxy body limit.

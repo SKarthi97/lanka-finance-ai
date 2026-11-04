@@ -1,7 +1,8 @@
 # Gap Analysis: Current Application vs. Requirements
 
-Status: DRAFT. Based on a read of every file in `src/` (Streamlit + SQLite + Ollama
-prototype). The app and tests were not executed for this review.
+Status: historical. Written against the Streamlit + SQLite + Ollama prototype in `src/`, before
+the FastAPI / Next.js / Postgres rebuild. Section 8 maps its gaps to the rebuilt application.
+Sections 1 to 7 are kept as written.
 
 ## 1. Documentation vs. implementation
 
@@ -90,3 +91,33 @@ or update the architecture to match what exists.
 5. Account concept, filters, then a second bank parser.
 6. Model-assisted categorization and analytics-function calling for the assistant.
 7. Reconcile `00-architecture.md` with the implementation.
+
+## 8. Status in the rebuilt application
+
+| Gap | Status |
+|---|---|
+| 1 Architecture vs code | Resolved: the architecture is implemented; `00-architecture.md` section 12 lists the differences |
+| 2.1 Duplicate protection | Resolved: sha256 per user plus transaction-level `row_hash` across overlapping statements |
+| 2.2, 2.4 Validate before save, transactional import | Resolved: one transaction per statement; unreconciled statements are held for review |
+| 2.3 Review screen | Resolved: statement review/accept, category Review queue |
+| 2.5 Debit/credit from balance only | Open (balance movement, then validated) |
+| 2.6 Year inference | Resolved for BOC: resolved from the end, `date_sequence` check |
+| 2.7 Money as floats | Resolved: `NUMERIC(18,2)` and `Decimal` |
+| 2.8 Page breaks, repeated headers | Resolved for BOC; unverified for other banks |
+| 3 Additional banks, OCR | Open |
+| 3 Account entity, filters, search, delete statement, bulk categorise, rule from correction | Resolved |
+| 3 Budgets, recurring, anomalies, forecasts, backup, assistant | Open |
+| 4 Tests, schema versioning, logging, Dockerfile | Resolved (pytest suite, Alembic, logging, Dockerfiles); CI and lockfiles open |
+| 5 Authentication, plaintext database, PDF password handling | Resolved: auth, password never stored. Database encryption at rest is not done |
+| 5 Descriptions sent to the model | Mitigated: only description stems go to the local model, never amounts or account numbers |
+| 6 README, docs | Resolved: README and `docs/0*.md` |
+
+### Current backlog
+
+- Keep manual categories when a statement is re-extracted.
+- Duplicate handling when an account number cannot be found.
+- Offline compose override, healthchecks for every service, backups and restore.
+- HNB adapter, then generic adapter and OCR.
+- CI and dependency lockfiles.
+- Review SQL parameter handling for anything built from user text.
+- Forward the remaining `LLM_*` settings through `docker-compose.yml` if they need tuning.

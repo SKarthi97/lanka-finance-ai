@@ -1,6 +1,8 @@
-# Lanka Finance AI: Architecture & Design (for approval)
+# Lanka Finance AI: Architecture & Design
 
-Status: DRAFT v1. Nothing is implemented until this is approved (promt.md §22).
+Status: approved design; phases 1 to 4 and part of 5 are implemented. Section 12 lists what
+is built, what differs from this design and what is still open. Where a section below
+disagrees with section 12, section 12 describes the code.
 
 ## 0. Decisions recorded from the requirements Q&A
 
@@ -210,3 +212,44 @@ Revised ordering: vertical slice first, then breadth. Each phase includes tests,
 - A 4B model on CPU is slow (a few tokens/s). Batch LLM work in the background and keep it off the critical path.
 - Model licences: Qwen3 is Apache-2.0 (redistribution allowed with notice). Llama models have their own licence. Only bundle weights after checking the licence (`docs/licenses.md` to follow).
 - Docker Desktop on Windows needs WSL2 and enough disk. `wsl --status` shows an Ubuntu distro with WSL 2 is present.
+
+## 12. Implementation status
+
+Migrations 0001 to 0007 (`backend/alembic/versions`).
+
+| Area | State | Where it is described |
+|---|---|---|
+| Compose stack (postgres, ollama, backend, worker, frontend), non-root, read-only, `cap_drop`, only the frontend publishes a port | Done | `docker-compose.yml` |
+| Auth: Argon2id, cookie sessions, CSRF, rate limit, change password, audit log | Done | `05-user-interface.md` |
+| Upload, sha256 duplicate check, password flow, retention, Postgres job queue | Done | `02-upload-and-queue.md` |
+| BOC extraction, validation, reconciliation, statement totals, duplicates across statements | Done | `03-extraction.md` |
+| Dashboard, trends, tracker, drill-down, transactions explorer, CSV export | Done | `03-extraction.md`, `05-user-interface.md` |
+| Categories, rules, learning from corrections, review queue, bulk edit | Done | `04-categorization.md` |
+| Local AI categorisation: name-based replies, confidence tiers, hunches, examples, eval tool | Done | `04-categorization.md` |
+| Ollama health and hardware screen | Done | System page |
+| HNB, Commercial, Sampath adapters; generic adapter; LLM extraction fallback; OCR | Not started | |
+| Offline compose override, GPU override, healthchecks for worker and frontend | Not started | |
+| Backup and restore scripts, encrypted archives | Not started | |
+| Internal transfer matching, recurring detection, merchants | Not started (`transfers` kind exists on categories only) | |
+| Assistant (function calling) and reports (Excel, PDF) | Not started | |
+
+### Where the code differs from the design above
+
+- **Account numbers:** the full number is never stored. `accounts` keeps the last 4 digits and
+  an HMAC-SHA256 fingerprint (key `ACCOUNT_FINGERPRINT_KEY`, or one generated into `settings`).
+  Section 4's `account_number_enc` is not used.
+- **Source-page viewer:** server-rendered PNGs (PyMuPDF), not pdf.js, and only while the
+  original file is kept.
+- **Adapter interface:** `identify` + `parse` only.
+- **Default model:** `qwen2.5:1.5b` is the compose default, but the evaluation in
+  `04-categorization.md` shows `qwen2.5:3b` is the smallest model that categorises reliably.
+- **AI output:** the model returns a category *name* from a closed list (schema `enum`), not an
+  id, and its confidence is not trusted on its own.
+- **Transactions columns:** `category_id` and `suggested_category_id` (migration 0007) replace
+  `primary_category_id` / `subcategory_id`; `classification_source` is
+  `rule | user_rule | manual | llm | llm_unsure`.
+- **Not created yet:** `merchants`, `transfer_groups`, `recurring_groups`.
+- **Frontend dependencies:** no charting library; charts are hand-drawn SVG.
+- **Env vars:** `LLM_*` settings control the AI pass (see `04-categorization.md`). The worker
+  reads its Ollama timeout from `LLM_TIMEOUT_S`, the backend from `OLLAMA_TIMEOUT_S`.
+  Compose forwards only the variables it lists.
