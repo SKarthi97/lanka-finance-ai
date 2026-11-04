@@ -35,6 +35,16 @@ Settings, Account. `POST /api/auth/change-password` with the current and new pas
 - On success every **other** session is deleted (the one you are using stays), and the change
   is written to the audit log (no password material).
 
+## Notification bell
+
+The bell in the top bar (it replaced the gear; Settings stays in the sidebar) shows a count and a
+list of what needs attention: an account whose latest statement ended more than 45 days ago,
+months with no statement, statements that did not reconcile, balance breaks between statements,
+and possible transfers between your own accounts. The list is worked out from the data each time
+(`GET /api/notifications`, `services/notifications.py`), so a notice disappears when its cause
+is fixed and nothing needs marking as read. Text holds bank names, the last four digits and
+dates only, never descriptions or amounts.
+
 ## Dashboard layout
 
 Above the tabs: **bank chips** ("All banks" plus one per bank; shown when there is more than

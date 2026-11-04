@@ -352,3 +352,6 @@ export type SuggestionGroup = {
 };
 
 export type Suggestions = { total: number; confident_threshold: number; groups: SuggestionGroup[] };
+
+export type Notice = { key: string; kind: string; severity: "warn" | "info"; text: string; href: string };
+export type Notifications = { count: number; items: Notice[] };

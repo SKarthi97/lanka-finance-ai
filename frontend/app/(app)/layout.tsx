@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ConfirmProvider } from "@/components/ConfirmDialog";
+import { NotificationBell } from "@/components/NotificationBell";
 import { LoadError } from "@/components/states";
 import {
   api,
@@ -175,14 +176,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </form>
 
         <div className="ml-auto flex items-center gap-2">
-          <Link
-            href="/settings"
-            aria-label="Settings"
-            title="Settings"
-            className="rounded p-2 text-lg leading-none hover:bg-slate-100"
-          >
-            ⚙️
-          </Link>
+          <NotificationBell refreshKey={pathname} />
           <span
             title={me.username}
             className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-sm font-bold text-accent-fg"
