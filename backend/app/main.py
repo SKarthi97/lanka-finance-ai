@@ -7,10 +7,12 @@ from app.routers import (
     budgets,
     categories,
     documents,
+    merchants,
     notifications,
     overview,
     recurring,
     reports,
+    search,
     system,
     transactions,
     transfers,
@@ -43,3 +45,5 @@ app.include_router(budgets.router)
 app.include_router(recurring.router)
 app.include_router(views.router)
 app.include_router(reports.router)
+app.include_router(merchants.router)
+app.include_router(search.router)

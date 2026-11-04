@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.deps import get_current_session
 from app.models import Account, Bank, Category, Transaction, UserSession
+from app.services import merchants
 
 router = APIRouter(prefix="/api", tags=["transactions"])
 
@@ -28,6 +29,8 @@ class TransactionOut(BaseModel):
     seq: int
     transaction_date: date
     description: str
+    merchant: str  # a clean name; the original description stays in `description`
+    merchant_source: str  # manual | llm | rule
     debit: Decimal
     credit: Decimal
     running_balance: Decimal
@@ -64,6 +67,9 @@ class Filters(BaseModel):
     flagged: bool = False
     duplicates: Literal["hide", "show", "only"] = "hide"
     q: str | None = None
+    min_amount: Decimal | None = None
+    max_amount: Decimal | None = None
+    direction: Literal["in", "out"] | None = None
 
 
 def _conditions(user_id: int, f: Filters) -> list:
@@ -94,6 +100,16 @@ def _conditions(user_id: int, f: Filters) -> list:
         conditions.append(Transaction.validation_status != "ok")
     if f.q:
         conditions.append(Transaction.original_description.ilike(f"%{f.q.strip()}%"))
+    # The amount of a row is whichever of debit and credit it has.
+    amount = Transaction.debit + Transaction.credit
+    if f.min_amount is not None:
+        conditions.append(amount >= f.min_amount)
+    if f.max_amount is not None:
+        conditions.append(amount <= f.max_amount)
+    if f.direction == "out":
+        conditions.append(Transaction.debit > 0)
+    elif f.direction == "in":
+        conditions.append(Transaction.credit > 0)
     return conditions
 
 
@@ -139,6 +155,9 @@ def list_transactions(
     flagged: bool = False,
     duplicates: Literal["hide", "show", "only"] = "hide",
     q: str | None = Query(default=None, max_length=100),
+    min_amount: Decimal | None = Query(default=None, ge=0),
+    max_amount: Decimal | None = Query(default=None, ge=0),
+    direction: Literal["in", "out"] | None = None,
     sort: SortKey = "date",
     order: Literal["asc", "desc"] = "desc",
     limit: int = Query(default=100, ge=1, le=MAX_PAGE_SIZE),
@@ -159,6 +178,9 @@ def list_transactions(
             flagged=flagged,
             duplicates=duplicates,
             q=q,
+            min_amount=min_amount,
+            max_amount=max_amount,
+            direction=direction,
         ),
     )
     total = (
@@ -174,6 +196,7 @@ def list_transactions(
         _query(conditions).order_by(*_ordering(sort, order)).limit(limit).offset(offset)
     ).all()
 
+    named = merchants.names_for(db, session.user_id, [r[0].original_description for r in rows])
     return TransactionList(
         total=total,
         items=[
@@ -183,6 +206,8 @@ def list_transactions(
                 seq=t.seq,
                 transaction_date=t.transaction_date,
                 description=t.original_description,
+                merchant=named[t.original_description][0],
+                merchant_source=named[t.original_description][1],
                 debit=t.debit,
                 credit=t.credit,
                 running_balance=t.running_balance,
@@ -228,6 +253,9 @@ def export_transactions(
     flagged: bool = False,
     duplicates: Literal["hide", "show", "only"] = "hide",
     q: str | None = Query(default=None, max_length=100),
+    min_amount: Decimal | None = Query(default=None, ge=0),
+    max_amount: Decimal | None = Query(default=None, ge=0),
+    direction: Literal["in", "out"] | None = None,
     sort: SortKey = "date",
     order: Literal["asc", "desc"] = "desc",
     session: UserSession = Depends(get_current_session),
@@ -248,6 +276,9 @@ def export_transactions(
             flagged=flagged,
             duplicates=duplicates,
             q=q,
+            min_amount=min_amount,
+            max_amount=max_amount,
+            direction=direction,
         ),
     )
     rows = db.execute(

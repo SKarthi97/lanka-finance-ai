@@ -21,6 +21,7 @@ from app.services.dedupe import refresh_all_users
 from app.services.extraction import extract_transactions
 from app.services.inspection import inspect_document
 from app.services.llm_classifier import JOB_TYPE as CLASSIFY_JOB, run_classify_job
+from app.services.merchants import JOB_TYPE as NAMING_JOB, run_naming_job
 
 log = logging.getLogger("worker")
 
@@ -30,6 +31,7 @@ HANDLERS: dict[str, Handler] = {
     "inspect_document": inspect_document,
     "extract_transactions": extract_transactions,
     CLASSIFY_JOB: run_classify_job,
+    NAMING_JOB: run_naming_job,
 }
 
 # Only these jobs decide a statement's status. A failed AI pass must never fail a statement.

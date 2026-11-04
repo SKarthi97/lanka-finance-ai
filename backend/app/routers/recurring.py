@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.deps import get_current_session
 from app.models import UserSession
-from app.services import recurring
+from app.services import merchants, recurring
 
 router = APIRouter(prefix="/api", tags=["recurring"])
 
@@ -17,6 +17,7 @@ ZERO = Decimal("0.00")
 
 class RecurringOut(BaseModel):
     stem: str  # the repeated part of the description
+    name: str  # the clean merchant name for it
     direction: str  # expense | income
     cadence: str  # weekly | fortnightly | monthly | quarterly | yearly
     count: int
@@ -39,9 +40,10 @@ def list_recurring(
     session: UserSession = Depends(get_current_session), db: Session = Depends(get_db)
 ) -> RecurringListOut:
     found = recurring.find(db, session.user_id)
+    named = merchants.names_for(db, session.user_id, [r.stem for r in found])
     active = [r for r in found if r.state != "ended"]
     return RecurringListOut(
-        items=[RecurringOut(**vars(r)) for r in found],
+        items=[RecurringOut(**vars(r), name=named[r.stem][0]) for r in found],
         monthly_expense=sum((r.monthly_equivalent for r in active if r.direction == "expense"), ZERO),
         monthly_income=sum((r.monthly_equivalent for r in active if r.direction == "income"), ZERO),
     )

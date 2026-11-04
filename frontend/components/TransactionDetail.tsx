@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef } from "react";
-import { TransactionItem } from "@/lib/api";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { api, ApiError, TransactionItem } from "@/lib/api";
 import { NO_ACCOUNT_HINT, SOURCE_LABEL, formatAmount, formatDate, formatMoney } from "@/lib/format";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -18,11 +18,45 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 export function TransactionDetail({
   transaction: t,
   onClose,
+  onRenamed,
 }: {
   transaction: TransactionItem;
   onClose: () => void;
+  onRenamed?: (name: string, source: "manual" | "llm" | "rule") => void;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
+  const [name, setName] = useState(t.merchant);
+  const [nameMessage, setNameMessage] = useState<string | null>(null);
+
+  useEffect(() => setName(t.merchant), [t.merchant]);
+
+  async function saveName(event: FormEvent) {
+    event.preventDefault();
+    const next = name.trim();
+    if (!next || next === t.merchant) return;
+    try {
+      const result = await api<{ merchant: string; merchant_source: "manual" }>(`/transactions/${t.id}/merchant`, {
+        method: "PUT",
+        json: { name: next },
+      });
+      setNameMessage("Saved. Every transaction with this description now shows it.");
+      onRenamed?.(result.merchant, result.merchant_source);
+    } catch (err) {
+      setNameMessage(err instanceof ApiError ? err.message : "Could not save the name.");
+    }
+  }
+
+  async function resetName() {
+    try {
+      const result = await api<{ merchant: string; merchant_source: "rule" }>(`/transactions/${t.id}/merchant`, {
+        method: "DELETE",
+      });
+      setNameMessage("Back to the tidied description.");
+      onRenamed?.(result.merchant, result.merchant_source);
+    } catch {
+      setNameMessage("Could not reset the name.");
+    }
+  }
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -50,7 +84,10 @@ export function TransactionDetail({
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <p className="text-xs uppercase tracking-wide text-slate-500">{formatDate(t.transaction_date)}</p>
-            <h2 className="mt-1 break-words text-lg font-semibold">{t.description}</h2>
+            <h2 className="mt-1 break-words text-lg font-semibold">{t.merchant}</h2>
+            {t.merchant.toLowerCase() !== t.description.toLowerCase() && (
+              <p className="break-words text-xs text-slate-500">{t.description}</p>
+            )}
           </div>
           <button
             ref={closeRef}
@@ -66,6 +103,37 @@ export function TransactionDetail({
           {isDebit ? "−" : "+"}
           {formatAmount(isDebit ? t.debit : t.credit)}
         </p>
+
+        <form onSubmit={saveName} className="mb-4 rounded border border-slate-200 bg-surface p-3 text-sm">
+          <label htmlFor="merchant-name" className="mb-1 block text-xs text-slate-500">
+            Merchant name{" "}
+            <span className="text-slate-400">
+              ({t.merchant_source === "manual" ? "set by you" : t.merchant_source === "llm" ? "suggested by the local AI" : "tidied automatically"})
+            </span>
+          </label>
+          <div className="flex gap-2">
+            <input
+              id="merchant-name"
+              value={name}
+              maxLength={40}
+              onChange={(e) => setName(e.target.value)}
+              className="min-w-0 flex-1 rounded border border-slate-300 bg-surface px-2 py-1.5"
+            />
+            <button type="submit" disabled={!name.trim() || name.trim() === t.merchant} className="rounded bg-accent px-3 py-1.5 text-accent-fg disabled:opacity-50">
+              Save
+            </button>
+          </div>
+          {t.merchant_source !== "rule" && (
+            <button type="button" onClick={resetName} className="mt-2 text-xs text-accent underline">
+              Reset to the tidied description
+            </button>
+          )}
+          {nameMessage && (
+            <p role="status" className="mt-2 text-xs text-slate-600">
+              {nameMessage}
+            </p>
+          )}
+        </form>
 
         <dl className="rounded border border-slate-200 bg-surface px-4">
           <Row label="Balance after">{formatMoney(t.running_balance)}</Row>

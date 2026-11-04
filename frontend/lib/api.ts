@@ -150,6 +150,8 @@ export type TransactionItem = {
   seq: number;
   transaction_date: string;
   description: string;
+  merchant: string;
+  merchant_source: "manual" | "llm" | "rule";
   debit: string;
   credit: string;
   running_balance: string;
@@ -379,6 +381,7 @@ export type Budgets = {
 
 export type RecurringItem = {
   stem: string;
+  name: string;
   direction: "expense" | "income";
   cadence: string;
   count: number;
@@ -401,6 +404,16 @@ export type ViewFilters = {
   month?: number | null;
   flagged?: boolean;
   duplicates?: "hide" | "show" | "only";
+  min_amount?: string | null;
+  max_amount?: string | null;
+  direction?: "in" | "out" | null;
+};
+
+export type SearchReading = {
+  filters: ViewFilters;
+  summary: string[];
+  used_ai: boolean;
+  ai_error: string | null;
 };
 
 export type SavedViewItem = { id: number; name: string; filters: ViewFilters };

@@ -25,6 +25,7 @@ from app.services.accounts import get_or_create_account
 from app.services.categorizer import classify_rows
 from app.services.dedupe import refresh_duplicates
 from app.services.llm_classifier import enqueue_classification
+from app.services.merchants import enqueue_naming
 from app.services.retention import discard_stored_file
 from app.services.validation import ValidationResult, validate
 
@@ -143,7 +144,9 @@ def extract_transactions(db: Session, job: Job, settings: Settings) -> None:
 
     # Whatever the rules left uncategorised goes to the local model, in its own job so a
     # slow or missing model never holds up (or fails) the statement.
-    if enqueue_classification(db, settings, document.user_id):
+    queued = enqueue_classification(db, settings, document.user_id)
+    queued = enqueue_naming(db, settings, document.user_id) or queued  # tidy merchant names too
+    if queued:
         db.commit()
 
     # Keep the file for statements that need a human look; drop it once reconciled.

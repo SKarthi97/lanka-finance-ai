@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { Pager } from "@/components/Pager";
 import { LoadError, RowsSkeleton } from "@/components/states";
+import { AskFilters } from "@/components/AskFilters";
 import { SavedViews } from "@/components/SavedViews";
 import { TransactionDetail } from "@/components/TransactionDetail";
 import { loadPref, savePref } from "@/lib/prefs";
@@ -97,6 +98,10 @@ export default function TransactionsPage() {
   const [month, setMonth] = useState("");
   const [onlyFlagged, setOnlyFlagged] = useState(false);
   const [showDuplicates, setShowDuplicates] = useState(false);
+  const [minAmount, setMinAmount] = useState("");
+  const [maxAmount, setMaxAmount] = useState("");
+  const [direction, setDirection] = useState<"" | "in" | "out">("");
+  const [namesQueued, setNamesQueued] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState(""); // "" = all, "none" = uncategorised, else an id
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
@@ -159,6 +164,11 @@ export default function TransactionsPage() {
   else if (categoryFilter) filterParams.set("category_id", categoryFilter);
   // Repeated transactions (overlapping statements) are hidden unless asked for.
   if (showDuplicates) filterParams.set("duplicates", "show");
+  // Only plain numbers go to the server; half-typed text waits.
+  const plain = /^\d+(\.\d{1,2})?$/;
+  if (plain.test(minAmount)) filterParams.set("min_amount", minAmount);
+  if (plain.test(maxAmount)) filterParams.set("max_amount", maxAmount);
+  if (direction) filterParams.set("direction", direction);
   const filterKey = filterParams.toString();
 
   // A different page or filter shows different rows, so the selection no longer applies.
@@ -310,6 +320,12 @@ export default function TransactionsPage() {
       },
     });
   if (onlyFlagged) chips.push({ key: "flagged", label: "Needs review", remove: () => filter(setOnlyFlagged)(false) });
+  if (plain.test(minAmount))
+    chips.push({ key: "min", label: `At least ${minAmount}`, remove: () => filter(setMinAmount)("") });
+  if (plain.test(maxAmount))
+    chips.push({ key: "max", label: `At most ${maxAmount}`, remove: () => filter(setMaxAmount)("") });
+  if (direction)
+    chips.push({ key: "direction", label: direction === "out" ? "Money out" : "Money in", remove: () => filter(setDirection)("") });
   if (showDuplicates)
     chips.push({ key: "dups", label: "Including duplicates", remove: () => filter(setShowDuplicates)(false) });
 
@@ -323,6 +339,9 @@ export default function TransactionsPage() {
     month: year && month ? Number(month) : null,
     flagged: onlyFlagged,
     duplicates: showDuplicates ? "show" : "hide",
+    min_amount: plain.test(minAmount) ? minAmount : null,
+    max_amount: plain.test(maxAmount) ? maxAmount : null,
+    direction: direction || null,
   };
 
   function applyView(f: ViewFilters) {
@@ -333,7 +352,19 @@ export default function TransactionsPage() {
     setMonth(f.year && f.month ? String(f.month) : "");
     setOnlyFlagged(!!f.flagged);
     setShowDuplicates(f.duplicates === "show" || f.duplicates === "only");
+    setMinAmount(f.min_amount ? String(Number(f.min_amount)) : "");
+    setMaxAmount(f.max_amount ? String(Number(f.max_amount)) : "");
+    setDirection(f.direction ?? "");
     setPage(1);
+  }
+
+  async function nameMerchants() {
+    try {
+      await api("/merchants/name", { method: "POST" });
+      setNamesQueued(true);
+    } catch {
+      setNotice("Could not start naming.");
+    }
   }
 
   function clearAll() {
@@ -344,6 +375,9 @@ export default function TransactionsPage() {
     setMonth("");
     setOnlyFlagged(false);
     setShowDuplicates(false);
+    setMinAmount("");
+    setMaxAmount("");
+    setDirection("");
     setPage(1);
   }
 
@@ -351,6 +385,16 @@ export default function TransactionsPage() {
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">Transactions</h1>
+        <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={nameMerchants}
+          disabled={namesQueued}
+          title="Ask the local AI to propose clean merchant names. It sees only the repeated words of each description, never amounts."
+          className="rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-60"
+        >
+          {namesQueued ? "Naming in the background…" : "✨ Improve names"}
+        </button>
         {/* A plain link: the browser downloads the file with your session cookie. */}
         <a
           href={`/api/transactions/export.csv?${filterKey}`}
@@ -360,7 +404,10 @@ export default function TransactionsPage() {
         >
           ⬇ Export CSV
         </a>
+        </div>
       </div>
+
+      <AskFilters onApply={applyView} />
 
       <div className="flex flex-wrap items-center gap-3">
         <input
@@ -431,6 +478,34 @@ export default function TransactionsPage() {
             </option>
           ))}
         </select>
+
+        <select
+          aria-label="Money in or out"
+          value={direction}
+          onChange={(e) => filter(setDirection)(e.target.value as "" | "in" | "out")}
+          className={select}
+        >
+          <option value="">Money in and out</option>
+          <option value="out">Money out</option>
+          <option value="in">Money in</option>
+        </select>
+
+        <input
+          inputMode="decimal"
+          value={minAmount}
+          onChange={(e) => filter(setMinAmount)(e.target.value.trim())}
+          placeholder="Min amount"
+          aria-label="Minimum amount"
+          className="w-28 rounded border border-slate-300 bg-surface px-2 py-2 text-sm"
+        />
+        <input
+          inputMode="decimal"
+          value={maxAmount}
+          onChange={(e) => filter(setMaxAmount)(e.target.value.trim())}
+          placeholder="Max amount"
+          aria-label="Maximum amount"
+          className="w-28 rounded border border-slate-300 bg-surface px-2 py-2 text-sm"
+        />
 
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -606,8 +681,11 @@ export default function TransactionsPage() {
                       title="Show details"
                       className="text-left hover:underline"
                     >
-                      {t.description}
+                      {t.merchant}
                     </button>
+                    {t.merchant.toLowerCase() !== t.description.toLowerCase() && (
+                      <div className="break-words text-xs text-slate-500">{t.description}</div>
+                    )}
                     {t.is_duplicate && (
                       <span
                         className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600"
@@ -669,7 +747,14 @@ export default function TransactionsPage() {
         <Pager page={page} pages={pages} onChange={setPage} />
       </div>
 
-      {detail && <TransactionDetail transaction={detail} onClose={() => setDetail(null)} />}
+      {detail && <TransactionDetail
+          transaction={detail}
+          onClose={() => setDetail(null)}
+          onRenamed={(name, source) => {
+            setDetail({ ...detail, merchant: name, merchant_source: source });
+            setReloadKey((n) => n + 1);
+          }}
+        />}
     </section>
   );
 }

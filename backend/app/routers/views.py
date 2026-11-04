@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -33,6 +34,9 @@ class ViewFilters(BaseModel):
     month: int | None = Field(default=None, ge=1, le=12)
     flagged: bool = False
     duplicates: Literal["hide", "show", "only"] = "hide"
+    min_amount: Decimal | None = Field(default=None, ge=0)
+    max_amount: Decimal | None = Field(default=None, ge=0)
+    direction: Literal["in", "out"] | None = None
 
 
 class ViewIn(BaseModel):
@@ -70,7 +74,7 @@ def save_view(
     name = body.name.strip()
     if not name:
         raise _error(422, "name_required", "Give the view a name.")
-    values = body.filters.model_dump(exclude_defaults=True)
+    values = body.filters.model_dump(mode="json", exclude_defaults=True)
 
     view = db.scalar(
         select(SavedView).where(SavedView.user_id == session.user_id, SavedView.name == name)

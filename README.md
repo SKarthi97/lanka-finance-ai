@@ -61,5 +61,6 @@ codes and counts, never descriptions or amounts.
 | `docs/05-user-interface.md` | Pages, account settings, dialogs, remembered choices, accessibility |
 | `docs/06-backup-and-restore.md` | Backup and restore scripts, scheduling, encryption, what survives re-extraction |
 | `docs/07-budgets-recurring-reports.md` | Budgets, recurring payments, saved filters, the monthly report |
+| `docs/08-ai-features.md` | Merchant names, search in plain words, and the embedding analysis |
 | `docs/windows-setup.md` | Windows, WSL2 and Docker setup |
 | `docs/licenses.md` | Third-party and model licences |

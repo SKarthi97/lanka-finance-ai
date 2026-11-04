@@ -413,3 +413,26 @@ class SavedView(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow
     )
+
+
+class MerchantName(Base):
+    """A clean name for a description stem, kept beside the original description.
+
+    Keyed by stem (the reusable part of a description), not by transaction, so it applies to
+    every row with that stem, survives a statement being extracted again, and covers future
+    statements. `source`: llm (local model) or manual (you typed it; never overwritten).
+    """
+
+    __tablename__ = "merchant_names"
+    __table_args__ = (UniqueConstraint("user_id", "stem", name="uq_merchant_names_stem"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    stem: Mapped[str] = mapped_column(String(200))
+    name: Mapped[str] = mapped_column(String(64))
+    source: Mapped[str] = mapped_column(String(16))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
