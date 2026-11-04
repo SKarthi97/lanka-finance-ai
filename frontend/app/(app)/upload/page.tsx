@@ -4,7 +4,6 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { LoadError, RowsSkeleton } from "@/components/states";
-import { StatementTracker } from "@/components/StatementTracker";
 import { api, ApiError, DocumentItem } from "@/lib/api";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ACTIVE_STATUSES, explainError } from "@/lib/format";
@@ -45,9 +44,6 @@ export default function UploadPage() {
   useEffect(() => {
     loadDocuments();
   }, [loadDocuments]);
-
-  // The tracker reloads whenever a statement is added, removed or changes status.
-  const statusSignature = documents.map((d) => `${d.id}:${d.status}`).join(",");
 
   // Poll while anything is still being processed.
   const hasActive = documents.some((d) => ACTIVE_STATUSES.has(d.status));
@@ -225,8 +221,6 @@ export default function UploadPage() {
           {busy ? "Uploading…" : needsPassword ? "Unlock and upload" : "Upload"}
         </button>
       </form>
-
-      <StatementTracker refreshKey={statusSignature} />
 
       <div>
         <h2 className="mb-2 font-medium">Uploaded statements</h2>

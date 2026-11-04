@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { CardSkeleton, LoadError, RowsSkeleton } from "@/components/states";
+import { StatementTracker } from "@/components/StatementTracker";
 import { BalanceChart, IncomeExpenseChart } from "@/components/TrendCharts";
 import { loadPref, savePref } from "@/lib/prefs";
 import { api, CategoryTotal, Dashboard, Tracker, Totals, Trend } from "@/lib/api";
@@ -116,8 +117,10 @@ function PeriodCards({
   filter,
   action,
   level = 2,
+  show = "both",
   children,
 }: {
+  show?: "totals" | "categories" | "both"; // which parts of the block to draw
   level?: 2 | 3; // heading level: 3 when this block sits inside another section
   children?: React.ReactNode; // extra content shown after the category bars
   title: string;
@@ -144,6 +147,8 @@ function PeriodCards({
         <Heading className={level === 3 ? "text-sm font-medium text-slate-700" : "font-medium"}>{title}</Heading>
         {action}
       </div>
+      {show !== "categories" && (
+      <>
       <div className="grid gap-3 sm:grid-cols-3">
         <Card label="Income" value={formatMoney(totals?.income)} tone="good" hint={vs("income") ?? undefined} />
         <Card label="Expense" value={formatMoney(totals?.expense)} tone="bad" hint={vs("expense") ?? undefined} />
@@ -175,17 +180,32 @@ function PeriodCards({
         </p>
       )}
 
-      <div className="mt-3">
-        <Sub className="mb-1 text-sm text-slate-600">Spending by category</Sub>
-        {byCategory && <CategoryBars items={byCategory} filter={filter} />}
-      </div>
+      </>
+      )}
+
+      {show !== "totals" && (
+        <div className={show === "categories" ? "" : "mt-3"}>
+          <Sub className="mb-1 text-sm text-slate-600">Spending by category</Sub>
+          {byCategory && <CategoryBars items={byCategory} filter={filter} />}
+        </div>
+      )}
       {children}
     </section>
   );
 }
 
+const TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "accounts", label: "Accounts" },
+  { id: "cashflow", label: "Cash flow" },
+  { id: "spending", label: "Spending" },
+  { id: "statements", label: "Statements" },
+] as const;
+type TabId = (typeof TABS)[number]["id"];
+
 export default function DashboardPage() {
   const now = new Date();
+  const [tab, setTab] = useState<TabId>("overview");
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [bank, setBank] = useState("");
@@ -202,7 +222,19 @@ export default function DashboardPage() {
     setHidden(loadAmountsHidden());
     const savedBank = loadPref("dashBank");
     if (savedBank) setBank(savedBank);
+    const savedTab = loadPref("dashTab");
+    if (TABS.some((t) => t.id === savedTab)) setTab(savedTab as TabId);
   }, []);
+
+  function chooseTab(next: TabId) {
+    setTab(next);
+    savePref("dashTab", next);
+  }
+
+  function chooseBank(code: string) {
+    setBank(code);
+    savePref("dashBank", code);
+  }
 
   // A remembered bank filter that no longer exists would leave the dashboard empty with no
   // control to undo it, so drop it.
@@ -359,63 +391,113 @@ export default function DashboardPage() {
   const kpiYearLabel = latestPeriod ? String(latestPeriod[0]) : null;
   const yearFilter = `${bankParam}&year=${year}`;
 
-  return (
-    <section className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">Dashboard</h1>
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          {(dash?.banks.length ?? 0) > 1 && (
-            <select aria-label="Bank" value={bank}
-              onChange={(e) => {
-                setBank(e.target.value);
-                savePref("dashBank", e.target.value);
-              }}
-              className={select}
-            >
-              <option value="">All banks</option>
-              {dash?.banks.map((b) => (
-                <option key={b.code} value={b.code}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          )}
-          <button
-            onClick={toggleHidden}
-            aria-pressed={hidden}
-            className={select}
-            title="Hide every amount, for screen sharing"
-          >
-            {hidden ? "Show amounts" : "Hide amounts"}
-          </button>
-        </div>
-      </div>
+  const totalBalance = Number(dash?.total_balance ?? 0); // display only
+  const accountDays = (asOf: string | null | undefined) =>
+    asOf ? Math.floor((now.getTime() - new Date(`${asOf}T00:00:00`).getTime()) / 86_400_000) : null;
 
-      {attention.length > 0 && (
-        <section aria-labelledby="attention-heading">
-          <h2 id="attention-heading" className="sr-only">
-            Needs your attention
-          </h2>
-          <ul role="status" className="space-y-2">
-            {attention.map((a) => (
-              <li
-                key={a.key}
-                className="flex items-start gap-2 rounded border border-l-4 border-amber-200 border-l-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-900"
-              >
-                <span aria-hidden="true">⚠</span>
-                <span>{a.text}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
+  function onTabKeys(event: React.KeyboardEvent, index: number) {
+    const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+    if (!step) return;
+    event.preventDefault();
+    const next = TABS[(index + step + TABS.length) % TABS.length].id;
+    chooseTab(next);
+    document.getElementById(`tab-${next}`)?.focus();
+  }
+
+  const attentionList = (items: { key: string; text: React.ReactNode }[]) =>
+    items.length > 0 && (
+      <section aria-labelledby="attention-heading">
+        <h2 id="attention-heading" className="sr-only">
+          Needs your attention
+        </h2>
+        <ul role="status" className="space-y-2">
+          {items.map((a) => (
+            <li
+              key={a.key}
+              className="flex items-start gap-2 rounded border border-l-4 border-amber-200 border-l-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+            >
+              <span aria-hidden="true">⚠</span>
+              <span>{a.text}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+    );
+
+  const periodBar = (showMonth: boolean) => (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      <span className="text-slate-600">Period</span>
+      <select aria-label="Year" value={year} onChange={(e) => setYear(Number(e.target.value))} className={select}>
+        {years.map((y) => (
+          <option key={y} value={y}>
+            {y}
+          </option>
+        ))}
+      </select>
+      {showMonth && (
+        <select aria-label="Month" value={month} onChange={(e) => setMonth(Number(e.target.value))} className={select}>
+          {MONTHS_LONG.map((name, index) => (
+            <option key={name} value={index + 1}>
+              {name}
+            </option>
+          ))}
+        </select>
       )}
+    </div>
+  );
+
+  const emptyNotice = emptyPeriod && (
+    <p className="rounded bg-slate-100 px-4 py-3 text-sm text-slate-700">
+      No transactions in {MONTHS_LONG[month - 1]} {year}. Your latest statement ends {formatDate(dash?.as_of)}.{" "}
+      <button onClick={jumpToLatest} className="underline">
+        Show that period
+      </button>
+    </p>
+  );
+
+  const bankChip = (active: boolean) =>
+    `rounded-full border px-3 py-1 text-sm ${
+      active ? "border-accent bg-accent text-accent-fg" : "border-slate-300 bg-surface hover:bg-slate-100"
+    }`;
+
+  return (
+    <section className="space-y-4">
+      <h1 className="text-xl font-semibold">Dashboard</h1>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {(dash?.banks.length ?? 0) > 1 ? (
+          <div role="group" aria-label="Show figures for" className="flex flex-wrap items-center gap-1.5">
+            <button type="button" aria-pressed={bank === ""} onClick={() => chooseBank("")} className={bankChip(bank === "")}>
+              All banks
+            </button>
+            {dash?.banks.map((b) => (
+              <button
+                key={b.code}
+                type="button"
+                aria-pressed={bank === b.code}
+                onClick={() => chooseBank(b.code)}
+                className={bankChip(bank === b.code)}
+              >
+                {b.name}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <span />
+        )}
+        <button
+          onClick={toggleHidden}
+          aria-pressed={hidden}
+          className={`${select} text-sm`}
+          title="Hide every amount, for screen sharing"
+        >
+          {hidden ? "Show amounts" : "Hide amounts"}
+        </button>
+      </div>
 
       {!dash ? (
         dashFailed ? (
-          <LoadError
-            message="Could not load the dashboard."
-            onRetry={() => setReload((n) => n + 1)}
-          />
+          <LoadError message="Could not load the dashboard." onRetry={() => setReload((n) => n + 1)} />
         ) : (
           <div className="space-y-6">
             <div className="grid gap-3 md:grid-cols-[1fr_2fr]">
@@ -426,19 +508,12 @@ export default function DashboardPage() {
               <RowsSkeleton rows={6} />
               <RowsSkeleton rows={6} />
             </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <CardSkeleton />
-              <CardSkeleton />
-              <CardSkeleton />
-            </div>
           </div>
         )
       ) : !dash.has_data ? (
         <section className="max-w-2xl rounded border border-slate-200 bg-surface p-5">
           <h2 className="mb-1 font-medium">Welcome — let’s get your first statement in</h2>
-          <p className="mb-4 text-sm text-slate-600">
-            Nothing to show yet. Everything stays on this computer.
-          </p>
+          <p className="mb-4 text-sm text-slate-600">Nothing to show yet. Everything stays on this computer.</p>
           <ol className="space-y-3 text-sm">
             {[
               {
@@ -446,7 +521,6 @@ export default function DashboardPage() {
                 text: "Drag a statement onto the Upload page. It is read and checked against its balances.",
                 href: "/upload",
                 action: "Go to Upload",
-                done: false,
               },
               {
                 title: "Review anything that did not reconcile",
@@ -456,14 +530,12 @@ export default function DashboardPage() {
                     : "Statements whose balances do not add up wait for your check before they count.",
                 href: "/upload",
                 action: "Open statements",
-                done: false,
               },
               {
                 title: "Sort transactions into categories",
                 text: "Rules and the local AI suggest categories; you confirm or correct them.",
                 href: "/categories",
                 action: "Open Categories",
-                done: false,
               },
             ].map((step, index) => (
               <li key={step.title} className="flex gap-3">
@@ -486,189 +558,284 @@ export default function DashboardPage() {
         </section>
       ) : (
         <>
-          {/* Current finance */}
-          <section>
-            <h2 className="mb-2 font-medium">Overview</h2>
-            <div className="mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Card
-                label="Total across accounts (LKR)"
-                value={formatMoney(dash?.total_balance)}
-                hint={
-                  dash?.as_of
-                    ? `As of ${formatDate(dash.as_of)}${staleDays !== null ? ` (${staleDays} days ago)` : ""}`
-                    : undefined
-                }
-              />
-              <Card
-                label={kpiMonthLabel ? `${kpiMonthLabel} net` : "Latest month net"}
-                value={kpi ? formatMoney(kpi.month.net) : "–"}
-                tone={kpi ? (Number(kpi.month.net) < 0 ? "bad" : Number(kpi.month.net) > 0 ? "good" : undefined) : undefined}
-                hint={kpi ? savingNote(kpi.month) ?? `${kpi.month.transactions} transactions` : undefined}
-              />
-              <Card
-                label={kpiYearLabel ? `${kpiYearLabel} to date, net` : "Year to date, net"}
-                value={kpi ? formatMoney(kpi.year.net) : "–"}
-                tone={kpi ? (Number(kpi.year.net) < 0 ? "bad" : Number(kpi.year.net) > 0 ? "good" : undefined) : undefined}
-                hint={kpi ? `${formatMoney(kpi.year.income)} in · ${formatMoney(kpi.year.expense)} out` : undefined}
-              />
-              <Card
-                label={kpiYearLabel ? `Saved in ${kpiYearLabel}` : "Saved this year"}
-                value={kpi ? savingRate(kpi.year) ?? "–" : "–"}
-                hint={kpi ? (savingRate(kpi.year) ? "of income" : savingNote(kpi.year) ?? undefined) : undefined}
-              />
-            </div>
-            <div>
-              <h3 className="mb-1 text-sm text-slate-600">Balance by account</h3>
-              <div className="overflow-x-auto rounded border border-slate-200 bg-surface">
-                <table className="w-full text-left text-sm">
-                  <thead className="border-b border-slate-200 text-slate-600">
-                    <tr>
-                      <th className="px-3 py-2 font-medium">Bank</th>
-                      <th className="px-3 py-2 text-right font-medium">Balance (LKR)</th>
-                      <th className="px-3 py-2 font-medium">As of</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(dash?.balances ?? []).map((b, index) => (
-                      <tr key={index} className="border-b border-slate-100 last:border-0">
-                        <td className="px-3 py-2">
-                          <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium uppercase">
-                            {b.bank_code ?? "?"}
-                          </span>
-                          {b.account_last4 ? (
-                            <span className="ml-2 text-xs text-slate-500">•••• {b.account_last4}</span>
-                          ) : (
-                            <span className="ml-2 text-xs text-slate-400" title={NO_ACCOUNT_HINT}>
-                              account not detected
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums">{formatMoney(b.balance)}</td>
-                        <td className="px-3 py-2">{formatDate(b.as_of)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </section>
+          <div role="tablist" aria-label="Dashboard sections" className="flex flex-wrap gap-1 border-b border-slate-200">
+            {TABS.map((t, index) => {
+              const active = tab === t.id;
+              const badge = t.id === "statements" ? dash.needs_review : 0;
+              return (
+                <button
+                  key={t.id}
+                  id={`tab-${t.id}`}
+                  role="tab"
+                  type="button"
+                  aria-selected={active}
+                  aria-controls={`panel-${t.id}`}
+                  tabIndex={active ? 0 : -1}
+                  onClick={() => chooseTab(t.id)}
+                  onKeyDown={(e) => onTabKeys(e, index)}
+                  className={`-mb-px border-b-2 px-3 py-2 text-sm ${
+                    active
+                      ? "border-accent font-medium"
+                      : "border-transparent text-slate-600 hover:border-slate-300"
+                  }`}
+                >
+                  {t.label}
+                  {badge > 0 && (
+                    <span
+                      className="ml-1.5 rounded-full bg-amber-400 px-1.5 text-xs font-semibold text-black"
+                      title={`${badge} statement${badge === 1 ? "" : "s"} need review`}
+                    >
+                      {badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
 
-          {emptyPeriod && (
-            <p className="rounded bg-slate-100 px-4 py-3 text-sm text-slate-700">
-              No transactions in {MONTHS_LONG[month - 1]} {year}. Your latest statement ends{" "}
-              {formatDate(dash?.as_of)}.{" "}
-              <button onClick={jumpToLatest} className="underline">
-                Show that period
-              </button>
-            </p>
-          )}
-
-          <section>
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <div>
-                <h2 className="font-medium">Year {year}: income, expense and balance</h2>
-                <p className="text-xs text-slate-500">
-                  Month by month, then the year’s totals. Click a month in the chart to see it below.
-                </p>
-              </div>
-              <select
-                aria-label="Year"
-                value={year}
-                onChange={(e) => setYear(Number(e.target.value))}
-                className={select}
-              >
-                {years.map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {trend ? (
-              <div className="grid gap-3 lg:grid-cols-2">
-                <div className="rounded border border-slate-200 bg-surface p-4">
-                  <h3 className="mb-1 text-sm text-slate-600">Income and expense by month</h3>
-                  <IncomeExpenseChart
-                    months={trend.months}
-                    bank={bank}
-                    selected={{ year, month }}
-                    onPick={(y, m) => {
-                      setYear(y);
-                      setMonth(m);
-                    }}
+          <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="space-y-6 pt-2">
+            {tab === "overview" && (
+              <>
+                {attentionList(attention)}
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <Card
+                    label="Total across accounts (LKR)"
+                    value={formatMoney(dash.total_balance)}
+                    hint={
+                      dash.as_of
+                        ? `As of ${formatDate(dash.as_of)}${staleDays !== null ? ` (${staleDays} days ago)` : ""}`
+                        : undefined
+                    }
+                  />
+                  <Card
+                    label={kpiMonthLabel ? `${kpiMonthLabel} net` : "Latest month net"}
+                    value={kpi ? formatMoney(kpi.month.net) : "–"}
+                    tone={kpi ? (Number(kpi.month.net) < 0 ? "bad" : Number(kpi.month.net) > 0 ? "good" : undefined) : undefined}
+                    hint={kpi ? savingNote(kpi.month) ?? `${kpi.month.transactions} transactions` : undefined}
+                  />
+                  <Card
+                    label={kpiYearLabel ? `${kpiYearLabel} to date, net` : "Year to date, net"}
+                    value={kpi ? formatMoney(kpi.year.net) : "–"}
+                    tone={kpi ? (Number(kpi.year.net) < 0 ? "bad" : Number(kpi.year.net) > 0 ? "good" : undefined) : undefined}
+                    hint={kpi ? `${formatMoney(kpi.year.income)} in · ${formatMoney(kpi.year.expense)} out` : undefined}
+                  />
+                  <Card
+                    label={kpiYearLabel ? `Saved in ${kpiYearLabel}` : "Saved this year"}
+                    value={kpi ? savingRate(kpi.year) ?? "–" : "–"}
+                    hint={kpi ? (savingRate(kpi.year) ? "of income" : savingNote(kpi.year) ?? undefined) : undefined}
                   />
                 </div>
-                <div className="rounded border border-slate-200 bg-surface p-4">
-                  <h3 className="mb-1 text-sm text-slate-600">Balance at the end of each month</h3>
-                  <BalanceChart months={trend.months} />
+
+                <section>
+                  <div className="mb-1 flex items-center justify-between gap-3">
+                    <h2 className="font-medium">Balance at the end of each month, {year}</h2>
+                    <button onClick={() => chooseTab("cashflow")} className="text-sm text-accent underline">
+                      Cash flow details
+                    </button>
+                  </div>
+                  <div className="rounded border border-slate-200 bg-surface p-4">
+                    {trend ? (
+                      <BalanceChart months={trend.months} />
+                    ) : trendFailed ? (
+                      <LoadError message="Could not load the chart." onRetry={() => setReload((n) => n + 1)} />
+                    ) : (
+                      <RowsSkeleton rows={5} />
+                    )}
+                  </div>
+                </section>
+
+                <p className="text-sm text-slate-600">
+                  {(dash.balances ?? []).length} account{(dash.balances ?? []).length === 1 ? "" : "s"}.{" "}
+                  <button onClick={() => chooseTab("accounts")} className="text-accent underline">
+                    See each account
+                  </button>
+                </p>
+              </>
+            )}
+
+            {tab === "accounts" && (
+              <section>
+                <h2 className="mb-2 font-medium">Accounts</h2>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {(dash.balances ?? []).map((b, index) => {
+                    const days = accountDays(b.as_of);
+                    const old = days !== null && days > 45;
+                    const share = totalBalance > 0 && Number(b.balance) > 0 ? (Number(b.balance) / totalBalance) * 100 : 0;
+                    return (
+                      <article key={index} className="rounded border border-slate-200 bg-surface p-4">
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium uppercase">
+                              {b.bank_code ?? "?"}
+                            </span>
+                            {b.account_last4 ? (
+                              <span className="ml-2 text-xs text-slate-500">•••• {b.account_last4}</span>
+                            ) : (
+                              <span className="ml-2 text-xs text-slate-400" title={NO_ACCOUNT_HINT}>
+                                account not detected
+                              </span>
+                            )}
+                          </div>
+                          {old && (
+                            <span
+                              className="rounded bg-amber-100 px-1.5 text-xs text-amber-800"
+                              title="The latest statement for this account is more than 45 days old"
+                            >
+                              out of date
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-2 text-xl font-semibold tabular-nums">{formatMoney(b.balance)}</div>
+                        <div className="text-xs text-slate-500">
+                          As of {formatDate(b.as_of)}
+                          {days !== null ? ` (${days} days ago)` : ""}
+                        </div>
+                        <div className="mt-2 h-1.5 rounded bg-slate-100" aria-hidden="true">
+                          <div className="h-1.5 rounded bg-accent" style={{ width: `${Math.max(share, share > 0 ? 1 : 0)}%` }} />
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">{share.toFixed(0)}% of the total</div>
+                        <div className="mt-3 flex gap-3 text-sm">
+                          {b.bank_code && (
+                            <>
+                              <button onClick={() => chooseBank(b.bank_code as string)} className="text-accent underline">
+                                Show only this bank
+                              </button>
+                              <Link href={`/transactions?bank_code=${encodeURIComponent(b.bank_code)}`} className="text-accent underline">
+                                Transactions
+                              </Link>
+                            </>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
-              </div>
-            ) : trendFailed ? (
-              <LoadError message="Could not load the charts." onRetry={() => setReload((n) => n + 1)} />
-            ) : (
-              <div className="grid gap-3 lg:grid-cols-2">
-                <RowsSkeleton rows={6} />
-                <RowsSkeleton rows={6} />
-              </div>
+                <p className="mt-3 text-xs text-slate-500">
+                  Each balance is the closing balance of that account’s latest reconciled or accepted statement,
+                  not a live balance.
+                </p>
+              </section>
             )}
 
-            <div className="mt-4">
-              <PeriodCards
-                level={3}
-                title={yearTitle}
-                totals={dash?.year}
-                byCategory={dash?.year_by_category}
-                filter={yearFilter}
-              />
-            </div>
-          </section>
-
-          <PeriodCards
-            title={monthTitle}
-            action={
-              <select
-                aria-label="Month"
-                value={month}
-                onChange={(e) => setMonth(Number(e.target.value))}
-                className={select}
-              >
-                {MONTHS_LONG.map((name, index) => (
-                  <option key={name} value={index + 1}>
-                    {name} {year}
-                  </option>
-                ))}
-              </select>
-            }
-            totals={dash?.month}
-            byCategory={dash?.month_by_category}
-            previous={dash?.previous_month}
-            previousLabel={previousLabel}
-            filter={monthFilter}
-          >
-            {dash && dash.top_expenses.length > 0 && (
-            <div className="mt-3">
-              <h3 className="mb-1 text-sm text-slate-600">Largest expenses</h3>
-              <ul className="divide-y divide-slate-100 rounded border border-slate-200 bg-surface text-sm">
-                {dash.top_expenses.map((t) => (
-                  <li key={t.id} className="flex items-baseline justify-between gap-3 px-3 py-2">
-                    <span className="min-w-0">
-                      <span className="text-xs text-slate-500">{formatDate(t.transaction_date)}</span>{" "}
-                      <span className="break-words">{t.description}</span>{" "}
-                      <span className="text-xs text-slate-500">
-                        {t.category_name ?? <span className="text-amber-700">uncategorised</span>}
-                      </span>
-                    </span>
-                    <span className="shrink-0 tabular-nums">{formatMoney(t.amount)}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            {tab === "cashflow" && (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="font-medium">Year {year}: income, expense and balance</h2>
+                    <p className="text-xs text-slate-500">Click a month in the chart to see it below.</p>
+                  </div>
+                  {periodBar(true)}
+                </div>
+                {emptyNotice}
+                {trend ? (
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <div className="rounded border border-slate-200 bg-surface p-4">
+                      <h3 className="mb-1 text-sm text-slate-600">Income and expense by month</h3>
+                      <IncomeExpenseChart
+                        months={trend.months}
+                        bank={bank}
+                        selected={{ year, month }}
+                        onPick={(y, m) => {
+                          setYear(y);
+                          setMonth(m);
+                        }}
+                      />
+                    </div>
+                    <div className="rounded border border-slate-200 bg-surface p-4">
+                      <h3 className="mb-1 text-sm text-slate-600">Balance at the end of each month</h3>
+                      <BalanceChart months={trend.months} />
+                    </div>
+                  </div>
+                ) : trendFailed ? (
+                  <LoadError message="Could not load the charts." onRetry={() => setReload((n) => n + 1)} />
+                ) : (
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <RowsSkeleton rows={6} />
+                    <RowsSkeleton rows={6} />
+                  </div>
+                )}
+                <PeriodCards
+                  show="totals"
+                  title={monthTitle}
+                  totals={dash.month}
+                  byCategory={dash.month_by_category}
+                  previous={dash.previous_month}
+                  previousLabel={previousLabel}
+                  filter={monthFilter}
+                />
+                <PeriodCards
+                  show="totals"
+                  level={3}
+                  title={yearTitle}
+                  totals={dash.year}
+                  byCategory={dash.year_by_category}
+                  filter={yearFilter}
+                />
+                <p className="text-xs text-slate-500">
+                  Income and expense come from reconciled or accepted statements, without transfers between your own
+                  accounts. A transaction that appears in two overlapping statements counts once.
+                </p>
+              </>
             )}
-          </PeriodCards>
-          <p className="text-xs text-slate-500">
-            Income and expense come from reconciled or accepted statements, without transfers between
-            your own accounts. A transaction that appears in two overlapping statements counts once.
-          </p>
+
+            {tab === "spending" && (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h2 className="font-medium">Spending</h2>
+                  {periodBar(true)}
+                </div>
+                {emptyNotice}
+                <PeriodCards
+                  show="categories"
+                  level={3}
+                  title={monthTitle}
+                  totals={dash.month}
+                  byCategory={dash.month_by_category}
+                  filter={monthFilter}
+                >
+                  {dash.top_expenses.length > 0 && (
+                    <div className="mt-4">
+                      <h4 className="mb-1 text-sm text-slate-600">Largest expenses</h4>
+                      <ul className="divide-y divide-slate-100 rounded border border-slate-200 bg-surface text-sm">
+                        {dash.top_expenses.map((t) => (
+                          <li key={t.id} className="flex items-baseline justify-between gap-3 px-3 py-2">
+                            <span className="min-w-0">
+                              <span className="text-xs text-slate-500">{formatDate(t.transaction_date)}</span>{" "}
+                              <span className="break-words">{t.description}</span>{" "}
+                              <span className="text-xs text-slate-500">
+                                {t.category_name ?? <span className="text-amber-700">uncategorised</span>}
+                              </span>
+                            </span>
+                            <span className="shrink-0 tabular-nums">{formatMoney(t.amount)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </PeriodCards>
+                <PeriodCards
+                  show="categories"
+                  level={3}
+                  title={yearTitle}
+                  totals={dash.year}
+                  byCategory={dash.year_by_category}
+                  filter={yearFilter}
+                />
+              </>
+            )}
+
+            {tab === "statements" && (
+              <>
+                {attentionList(attention.filter((a) => ["review", "stale", "gaps"].includes(a.key)))}
+                <StatementTracker bank={bank} />
+                <p className="text-sm">
+                  <Link href="/upload" className="text-accent underline">
+                    Upload a statement
+                  </Link>
+                </p>
+              </>
+            )}
+          </div>
         </>
       )}
     </section>

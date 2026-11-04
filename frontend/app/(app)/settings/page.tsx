@@ -54,7 +54,7 @@ export default function SettingsPage() {
     try {
       window.localStorage.setItem("rememberChoices", value ? "1" : "0");
       if (!value) {
-        for (const key of ["txPageSize", "txSort", "txOrder", "dashBank"]) window.localStorage.removeItem(key);
+        for (const key of ["txPageSize", "txSort", "txOrder", "dashBank", "dashTab"]) window.localStorage.removeItem(key);
       }
     } catch {
       /* storage blocked */

@@ -8,7 +8,7 @@ import { MONTHS, NO_ACCOUNT_HINT } from "@/lib/format";
 const select = "rounded border border-slate-300 bg-surface px-2 py-1 text-sm";
 
 /** Which months have a statement, per bank and account. `refreshKey` reloads it after uploads. */
-export function StatementTracker({ refreshKey = "" }: { refreshKey?: string }) {
+export function StatementTracker({ refreshKey = "", bank = "" }: { refreshKey?: string; bank?: string }) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [tracker, setTracker] = useState<Tracker | null>(null);
@@ -28,6 +28,8 @@ export function StatementTracker({ refreshKey = "" }: { refreshKey?: string }) {
       })
       .catch(() => setTracker(null));
   }, [year, refreshKey]);
+
+  const rows = (tracker?.rows ?? []).filter((r) => !bank || r.bank_code === bank);
 
   return (
     <section id="tracker">
@@ -50,7 +52,7 @@ export function StatementTracker({ refreshKey = "" }: { refreshKey?: string }) {
         </select>
       </div>
 
-      {!tracker || tracker.rows.length === 0 ? (
+      {!tracker || rows.length === 0 ? (
         <p className="text-sm text-slate-500">
           Nothing to track yet. Each uploaded statement ticks its month here.
         </p>
@@ -68,7 +70,7 @@ export function StatementTracker({ refreshKey = "" }: { refreshKey?: string }) {
               </tr>
             </thead>
             <tbody>
-              {tracker.rows.map((row, index) => (
+              {rows.map((row, index) => (
                 <tr key={index} className="border-b border-slate-100 last:border-0">
                   <td className="whitespace-nowrap px-3 py-2 text-left">
                     <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium uppercase">

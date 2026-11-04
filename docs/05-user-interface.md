@@ -8,7 +8,7 @@ talks only to the Next.js server, which proxies `/api` to the backend on the int
 | Page | Purpose |
 |---|---|
 | Dashboard (`/`) | Balances, month and year figures, trends, spending by category, attention panel |
-| Upload (`/upload`) | Upload a statement (with password if encrypted), the statement tracker, status of each document |
+| Upload (`/upload`) | Upload a statement (with password if encrypted), status of each document |
 | Transactions (`/transactions`) | Explorer with filters, sorting, paging, export, bulk edit and detail panel |
 | Categories (`/categories`) | Categories, rules, Review queue, AI suggestions |
 | Statement (`/documents/{id}`) | One statement: status, checks, issues, rows, source pages |
@@ -37,14 +37,21 @@ Settings, Account. `POST /api/auth/change-password` with the current and new pas
 
 ## Dashboard layout
 
-1. Filters: bank (remembered), "Hide amounts" (masks every figure for screen sharing).
-2. Current balance per bank/account, as of the latest counted statement.
-3. Year list, then for the chosen year: totals card, trend charts, "Income, expense and balance
-   by month" (month cards, with the chosen month's detail beneath), and the **year** totals and
-   spending by category under that month block.
-4. Headings state the period explicitly (for example "March 2025" or "Year 2025") so a card can
-   never be mistaken for a different period.
-5. "Needs your attention" and largest expenses.
+Above the tabs: **bank chips** ("All banks" plus one per bank; shown when there is more than
+one bank, remembered in the browser) and "Hide amounts" (masks every figure for screen
+sharing). The chosen bank applies to every tab. Below them, five tabs (the last one is
+remembered; arrow keys move between tabs):
+
+| Tab | Contents |
+|---|---|
+| Overview | "Needs your attention", four summary cards for the latest month with data, the month-end balance chart for the chosen year |
+| Accounts | One card per account: balance, as-of date and age, "out of date" flag (over 45 days), share of the total, "Show only this bank" and a link to its transactions |
+| Cash flow | Year and month pickers, income/expense and balance charts (click a month to select it), month and year income/expense/net cards |
+| Spending | Year and month pickers, spending by category for the month (largest expenses beneath) and for the year |
+| Statements | Statement problems (not reconciled, stale, gaps), the statement tracker, a link to Upload; the tab shows a badge with the number needing review |
+
+Headings state the period explicitly (for example "March 2025" or "2025 totals") so a card can
+never be mistaken for a different period. The statement tracker follows the bank chip (only that bank's accounts are listed); it is no longer on the Upload page.
 
 Charts have hover tooltips (keyboard focusable), hidden data tables for screen readers, and
 `aria-hidden` drawings.
@@ -72,7 +79,7 @@ Charts have hover tooltips (keyboard focusable), hidden data tables for screen r
 ## Remembered choices
 
 Stored in the browser only (`localStorage`, wrapped in try/catch so a blocked store just means
-nothing is remembered): page size, sort, sort order and the dashboard bank. Settings has one
+nothing is remembered): page size, sort, sort order, the dashboard bank and the dashboard tab. Settings has one
 switch ("Remember my choices") which, when turned off, also clears the saved values. Nothing
 here goes to the server.
 
