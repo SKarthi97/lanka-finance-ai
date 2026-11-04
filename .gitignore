@@ -49,6 +49,9 @@ src/data/
 *.sqlite3
 
 sample_pdfs/
+# Database backups hold every transaction: never commit them
+backups/
+*.dump
 # Node / Next.js
 node_modules/
 .next/

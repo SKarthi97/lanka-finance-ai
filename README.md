@@ -59,5 +59,6 @@ codes and counts, never descriptions or amounts.
 | `docs/03-extraction.md` | BOC extraction, validation, duplicates, dashboard, tracker, API |
 | `docs/04-categorization.md` | Rules, learning, the local AI, tiers, model evaluation |
 | `docs/05-user-interface.md` | Pages, account settings, dialogs, remembered choices, accessibility |
+| `docs/06-backup-and-restore.md` | Backup and restore scripts, scheduling, encryption, what survives re-extraction |
 | `docs/windows-setup.md` | Windows, WSL2 and Docker setup |
 | `docs/licenses.md` | Third-party and model licences |

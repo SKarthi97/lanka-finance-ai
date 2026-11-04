@@ -9,6 +9,7 @@ import hashlib
 import logging
 import time
 from datetime import timedelta
+from decimal import Decimal
 
 import pymupdf
 from sqlalchemy import delete, select
@@ -48,6 +49,45 @@ def row_hash(account_id: int | None, tx) -> str:
         ]
     )
     return hashlib.sha256(key.encode()).hexdigest()
+
+
+def _match_key(row_date, debit, credit, balance, description: str) -> tuple:
+    """Identity of a row across a re-extraction. The account is left out on purpose: a fixed
+    adapter may find the account number the first run missed, which changes `row_hash`."""
+    return (
+        row_date,
+        f"{Decimal(debit):.2f}",
+        f"{Decimal(credit):.2f}",
+        f"{Decimal(balance):.2f}",
+        _normalise(description),
+    )
+
+
+def _manual_choices(db: Session, document_id: int) -> dict[tuple, list[tuple]]:
+    """The categories you set by hand on this statement, keyed by `_match_key`.
+
+    A list per key, in statement order, so identical rows inside one statement each get
+    their own choice back.
+    """
+    rows = db.execute(
+        select(
+            Transaction.transaction_date,
+            Transaction.debit,
+            Transaction.credit,
+            Transaction.running_balance,
+            Transaction.original_description,
+            Transaction.category_id,
+            Transaction.classification_confidence,
+            Transaction.classification_explanation,
+        )
+        .where(Transaction.document_id == document_id, Transaction.classification_source == "manual")
+        .order_by(Transaction.seq)
+    ).all()
+    kept: dict[tuple, list[tuple]] = {}
+    for row in rows:
+        key = _match_key(row[0], row[1], row[2], row[3], row[4])
+        kept.setdefault(key, []).append((row[5], row[6], row[7]))
+    return kept
 
 
 def extract_transactions(db: Session, job: Job, settings: Settings) -> None:
@@ -130,25 +170,37 @@ def _persist(
     parsed.account_number = None  # drop the sensitive value as early as possible
     document.account_id = account.id if account else None
 
+    # Re-extraction replaces the rows, so remember the categories you set by hand first.
+    kept = _manual_choices(db, document.id)
     db.execute(delete(Transaction).where(Transaction.document_id == document.id))
+    restored = 0
     for tx in parsed.transactions:
-        db.add(
-            Transaction(
-                user_id=document.user_id,
-                document_id=document.id,
-                account_id=document.account_id,
-                bank_id=document.bank_id,
-                seq=tx.seq,
-                transaction_date=tx.date,
-                original_description=tx.description,
-                debit=tx.debit,
-                credit=tx.credit,
-                running_balance=tx.balance,
-                source_page=tx.page_no,
-                validation_status=result.row_status.get(tx.seq, "ok"),
-                row_hash=row_hash(document.account_id, tx),
-            )
+        row = Transaction(
+            user_id=document.user_id,
+            document_id=document.id,
+            account_id=document.account_id,
+            bank_id=document.bank_id,
+            seq=tx.seq,
+            transaction_date=tx.date,
+            original_description=tx.description,
+            debit=tx.debit,
+            credit=tx.credit,
+            running_balance=tx.balance,
+            source_page=tx.page_no,
+            validation_status=result.row_status.get(tx.seq, "ok"),
+            row_hash=row_hash(document.account_id, tx),
         )
+        choices = kept.get(_match_key(tx.date, tx.debit, tx.credit, tx.balance, tx.description))
+        if choices:
+            category_id, confidence, explanation = choices.pop(0)
+            row.category_id = category_id
+            row.classification_source = "manual"
+            row.classification_confidence = confidence
+            row.classification_explanation = explanation
+            restored += 1
+        db.add(row)
+    if kept:
+        log.info("document %s: kept %s of your manual categories", document.id, restored)
 
     document.period_start = parsed.period_start
     document.period_end = parsed.statement_date

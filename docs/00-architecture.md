@@ -231,6 +231,7 @@ Migrations 0001 to 0007 (`backend/alembic/versions`).
 | Commercial Bank adapter (written from one quiet-account layout; ordinary debits/credits and multi-page unverified) | Done, needs real-statement checks | `03-extraction.md` |
 | Sampath Bank adapter (savings statement; written from one real layout, multi-page unverified) | Done, needs real-statement checks | `03-extraction.md` |
 | Commercial, Sampath adapters; generic adapter; LLM extraction fallback; OCR | Not started | |
+| Backup and restore scripts, manual categories kept on re-extract, per-bank duplicate matching | Done (scripts untested on the real install until run) | `06-backup-and-restore.md` |
 | Offline compose override, GPU override, healthchecks for worker and frontend | Not started | |
 | Backup and restore scripts, encrypted archives | Not started | |
 | Internal transfer matching, recurring detection, merchants | Not started (`transfers` kind exists on categories only) | |

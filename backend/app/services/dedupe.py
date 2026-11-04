@@ -5,6 +5,7 @@ re-downloaded copy whose bytes differ) contain the same transactions. The file h
 see that, so rows are compared by `row_hash`: account, date, debit, credit, running balance
 and normalised description (docs/00-architecture.md section 4). The running balance makes a
 false match practically impossible: two different transactions cannot leave the same balance.
+Rows are only compared within one bank, which matters when the account number was not found.
 
 One copy per transaction stays canonical; the others are flagged `is_duplicate` and point at
 it. Duplicates remain visible but are excluded from every total.
@@ -42,15 +43,18 @@ def refresh_duplicates(db: Session, user_id: int) -> int:
             Transaction.row_hash,
             Transaction.document_id,
             Transaction.seq,
+            Transaction.bank_id,
             Document.status,
         )
         .join(Document, Document.id == Transaction.document_id)
         .where(Transaction.user_id == user_id, Transaction.row_hash.in_(repeated))
     ).all()
 
-    groups: dict[str, list] = defaultdict(list)
+    # The bank is part of the key: when no account number was found the hash has no account in
+    # it, and two banks' statements must never be matched on date, amount and text alone.
+    groups: dict[tuple, list] = defaultdict(list)
     for row in rows:
-        groups[row.row_hash].append(row)
+        groups[(row.row_hash, row.bank_id)].append(row)
 
     wanted: dict[int, int] = {}  # duplicate row id -> canonical row id
     for members in groups.values():

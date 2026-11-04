@@ -115,9 +115,9 @@ or update the architecture to match what exists.
 
 ### Current backlog
 
-- Keep manual categories when a statement is re-extracted.
-- Duplicate handling when an account number cannot be found.
-- Offline compose override, healthchecks for every service, backups and restore.
+- Offline compose override and healthchecks for every service.
+- (Done, see `06-backup-and-restore.md`: backups and restore, manual categories kept on
+  re-extract, duplicate matching within one bank when no account number is found.)
 - Confirm the HNB adapter on real multi-page statements; then Commercial, Sampath, a generic
   adapter and OCR.
 - CI and dependency lockfiles.
