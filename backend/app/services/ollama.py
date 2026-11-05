@@ -5,6 +5,57 @@ import httpx
 from app.config import Settings
 
 
+# Models that answered "does not support thinking" once; they are not sent the option again.
+_NO_THINK_SUPPORT: set[str] = set()
+
+
+def generate_body(
+    settings: Settings,
+    prompt: str,
+    *,
+    schema: dict | None = None,
+    think: bool | None = None,
+    options: dict | None = None,
+) -> dict:
+    """The JSON body for POST /api/generate.
+
+    `think` is explicit reasoning for models that have it: None uses the OLLAMA_THINK setting
+    (off unless you turned it on), True asks this call to reason, False forbids it. It is only
+    sent to models that accept it.
+    """
+    body: dict = {
+        "model": settings.ollama_model,
+        "prompt": prompt,
+        "stream": False,
+        "options": {"temperature": 0, **(options or {})},
+    }
+    if schema is not None:
+        body["format"] = schema
+    if settings.ollama_model not in _NO_THINK_SUPPORT:
+        body["think"] = settings.ollama_think if think is None else think
+    return body
+
+
+def generate(
+    client: httpx.Client,
+    settings: Settings,
+    prompt: str,
+    *,
+    schema: dict | None = None,
+    think: bool | None = None,
+    options: dict | None = None,
+) -> httpx.Response:
+    """POST /api/generate, retrying once without `think` if the model rejects the option
+    (a model with no reasoning mode, or an older Ollama). The caller checks the status."""
+    body = generate_body(settings, prompt, schema=schema, think=think, options=options)
+    reply = client.post("/api/generate", json=body)
+    if reply.status_code == 400 and "think" in body and "think" in reply.text.lower():
+        _NO_THINK_SUPPORT.add(settings.ollama_model)
+        body.pop("think")
+        reply = client.post("/api/generate", json=body)
+    return reply
+
+
 async def check_ollama(
     settings: Settings,
     warmup: bool = False,

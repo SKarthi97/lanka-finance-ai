@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.models import ModelRun
+from app.services import ollama
 from app.services.llm_classifier import LlmUnavailable, _model_digest
 
 T = TypeVar("T", bound=BaseModel)
@@ -46,23 +47,19 @@ def ask(
     prompt: str,
     schema: dict,
     model: type[T],
+    think: bool | None = None,
 ) -> T | None:
-    """Ask once (retrying an unusable reply). None when no valid reply came."""
+    """Ask once (retrying an unusable reply). None when no valid reply came.
+
+    `think=True` lets the model reason for this question; the default follows OLLAMA_THINK
+    (off). Nothing in the app needs reasoning today: labelling and filter-reading are lookups.
+    """
     prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()
     for _ in range(ATTEMPTS):
         began = time.perf_counter()
         parsed: T | None = None
         try:
-            reply = client.post(
-                "/api/generate",
-                json={
-                    "model": settings.ollama_model,
-                    "prompt": prompt,
-                    "stream": False,
-                    "format": schema,
-                    "options": {"temperature": 0},
-                },
-            )
+            reply = ollama.generate(client, settings, prompt, schema=schema, think=think)
             reply.raise_for_status()
             parsed = model.model_validate(json.loads(reply.json().get("response", "")))
         except (httpx.HTTPError, ValueError, ValidationError):

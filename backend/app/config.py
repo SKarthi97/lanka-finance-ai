@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://ollama:11434"
     ollama_model: str = "qwen2.5:1.5b"
     ollama_timeout_s: float = 60.0
+    # Reasoning ("thinking") for models that have it (Qwen3, Qwen3.5...). Off by default: labelling
+    # and filter-reading do not need it and on a CPU it multiplies the time. A call that really
+    # needs it asks for it explicitly (see app.services.ollama.generate); True turns it on for all.
+    ollama_think: bool = False
 
     cookie_name: str = "lanka_session"
     # Set true when the frontend is served over HTTPS.

@@ -56,6 +56,7 @@ services:
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:1.5b}
       OLLAMA_TIMEOUT_S: ${OLLAMA_TIMEOUT_S:-60}
+      OLLAMA_THINK: ${OLLAMA_THINK:-false}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       DOCUMENTS_DIR: /data/documents
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-25}
@@ -96,6 +97,7 @@ services:
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:1.5b}
       OLLAMA_TIMEOUT_S: ${LLM_TIMEOUT_S:-120}
+      OLLAMA_THINK: ${OLLAMA_THINK:-false}
       LLM_CLASSIFY_ENABLED: ${LLM_CLASSIFY_ENABLED:-true}
       LLM_CONFIDENCE_THRESHOLD: ${LLM_CONFIDENCE_THRESHOLD:-0.8}
     depends_on:

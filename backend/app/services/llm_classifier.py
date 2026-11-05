@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings
 from app.job_queue import enqueue
 from app.models import Category, ClassificationRule, Job, ModelRun, Transaction
+from app.services import ollama
 from app.services.categorizer import cluster_stems, description_stem, ensure_defaults
 
 log = logging.getLogger("llm_classifier")
@@ -210,16 +211,7 @@ def classify_stems(
                 began = time.perf_counter()
                 parsed: Suggestions | None = None
                 try:
-                    reply = client.post(
-                        "/api/generate",
-                        json={
-                            "model": settings.ollama_model,
-                            "prompt": prompt,
-                            "stream": False,
-                            "format": schema,
-                            "options": {"temperature": 0},
-                        },
-                    )
+                    reply = ollama.generate(client, settings, prompt, schema=schema)
                     reply.raise_for_status()
                     parsed = Suggestions.model_validate(json.loads(reply.json().get("response", "")))
                 except (httpx.HTTPError, ValueError, ValidationError):

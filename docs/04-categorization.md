@@ -96,7 +96,9 @@ Measured with the evaluation script on its 41 synthetic descriptions (batch 5, C
 |---|---|---|---|---|
 | `qwen2.5:1.5b` | 6/41 (the rest null) | 5 | 5/6 | 60 s |
 | `qwen2.5:3b`, numeric ids in the prompt | 30/41 | 18 | 18/29 | 249 s |
-| `qwen2.5:3b`, category names (current) | 36/41 | 32 | 32/36 | 173 s |
+| `qwen2.5:3b`, category names | 36/41 | 32 | 32/36 | 173 s |
+| `qwen3:4b`, category names, `think: false` (recommended) | 41/41 | 37 | 37/41 | 247 s |
+| `qwen3.5:4b`, category names, `think: false` | 41/41 | 38 | 38/41 | 368 s |
 
 Findings: 1.5B is too small for about 20 categories; the closed list of names fixed most of the
 3B model's mix-ups; the model reports 1.00 for almost everything, so **its confidence does not
@@ -109,6 +111,15 @@ OLLAMA_MODEL=qwen2.5:3b
 LLM_TIMEOUT_S=300
 LLM_CONFIDENCE_THRESHOLD=1.01   # nothing is auto-applied; every guess is an AI hunch in Review
 ```
+
+**Reasoning models (Qwen3, Qwen3.5):** these "think" before answering, which on a CPU can
+multiply the time for a task that is a lookup. The app therefore sends `think: false` by
+default (`OLLAMA_THINK`, default `false`, in `app/config.py`, forwarded by compose to the backend
+and worker). Set `OLLAMA_THINK=true` only to let every call reason; code that genuinely needs
+reasoning can ask for it for one call (`think=True` in `services/ollama.generate` /
+`llm_json.ask`). A model with no reasoning mode (such as `qwen2.5`) rejects the option; the
+request is then repeated without it and that model is remembered, so no setting needs changing
+when you switch models.
 
 Compose forwards `OLLAMA_MODEL`, `LLM_CLASSIFY_ENABLED`, `LLM_TIMEOUT_S` (worker) and
 `OLLAMA_TIMEOUT_S` (backend, used by the "ask the AI" button; default 60, too short for 3B),
