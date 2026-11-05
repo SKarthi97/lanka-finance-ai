@@ -6,7 +6,8 @@ from app.config import Settings, get_settings
 from app.db import get_db
 from app.deps import get_current_session
 from app.models import Transaction, UserSession
-from app.services import merchants
+from app.routers.ai import ProgressOut, progress_out
+from app.services import ai_activity, merchants
 from app.services.categorizer import description_stem
 
 router = APIRouter(prefix="/api", tags=["merchants"])
@@ -81,3 +82,33 @@ def name_merchants(
     queued = merchants.enqueue_naming(db, settings, session.user_id)
     db.commit()
     return QueuedOut(queued=queued)
+
+
+class NamingStatus(BaseModel):
+    ai_enabled: bool
+    unnamed: int  # distinct descriptions with no stored name yet
+    progress: ProgressOut
+
+
+@router.get("/merchants/status", response_model=NamingStatus)
+def naming_status(
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> NamingStatus:
+    unnamed = ai_activity.naming_waiting(db, session.user_id)
+    return NamingStatus(
+        ai_enabled=settings.llm_classify_enabled,
+        unnamed=unnamed,
+        progress=progress_out(
+            ai_activity.progress(
+                db,
+                session.user_id,
+                merchants.JOB_TYPE,
+                "merchant",
+                unnamed,
+                merchants.BATCH_SIZE,
+                merchants.MAX_STEMS_PER_JOB,
+            )
+        ),
+    )

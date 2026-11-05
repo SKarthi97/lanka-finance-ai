@@ -18,6 +18,7 @@ code-parsed parts and a short leftover keyword still work.
 """
 
 import re
+import time
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -71,6 +72,7 @@ class Interpretation:
     summary: list[str] = field(default_factory=list)
     used_ai: bool = False
     ai_error: str | None = None
+    model_ms: int | None = None  # time spent waiting for the local model, when it was asked
 
 
 def _number(raw: str, suffix: str | None) -> Decimal | None:
@@ -273,8 +275,10 @@ def interpret(
     keyword: str | None = None
 
     if category is None and leftover and settings.llm_classify_enabled:
+        began = time.perf_counter()
         try:
             reading = _ask_model(db, settings, " ".join(leftover), categories, transport)
+            result.model_ms = round((time.perf_counter() - began) * 1000)
         except LlmUnavailable:
             reading = None
             result.ai_error = "The local AI is not available, so only dates, amounts and banks were read."

@@ -2,7 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { LoadError, Skeleton } from "@/components/states";
-import { api, HardwareReport, OllamaStatus } from "@/lib/api";
+import { AiActivity, api, HardwareReport, OllamaStatus } from "@/lib/api";
+import { formatMs } from "@/lib/format";
+
+const PURPOSE: Record<string, string> = {
+  categorize: "Categorising",
+  merchant: "Merchant names",
+  search: "Search in plain words",
+};
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -27,6 +34,8 @@ export default function SystemPage() {
   const [hardware, setHardware] = useState<HardwareReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [warming, setWarming] = useState(false);
+  const [activity, setActivity] = useState<AiActivity | null>(null);
+  const [activityOpen, setActivityOpen] = useState(false); // collapsed: just the card's name
 
   const loadOllama = useCallback(async (warmup: boolean) => {
     setWarming(warmup);
@@ -37,6 +46,12 @@ export default function SystemPage() {
     } finally {
       setWarming(false);
     }
+  }, []);
+
+  useEffect(() => {
+    api<AiActivity>("/ai/activity")
+      .then(setActivity)
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -116,6 +131,84 @@ export default function SystemPage() {
           )}
         </Card>
       </div>
+
+      <section className="rounded border border-slate-200 bg-surface">
+        <h2>
+          <button
+            type="button"
+            onClick={() => setActivityOpen((open) => !open)}
+            aria-expanded={activityOpen}
+            aria-controls="ai-activity-details"
+            className="flex w-full items-center justify-between gap-3 p-4 text-left font-medium hover:bg-slate-100"
+          >
+            AI activity
+            <span aria-hidden="true" className={`text-slate-500 transition-transform ${activityOpen ? "rotate-180" : ""}`}>
+              ▾
+            </span>
+          </button>
+        </h2>
+        <div id="ai-activity-details" hidden={!activityOpen} className="px-4 pb-4">
+        <p className="mb-3 text-xs text-slate-500">
+          How often the local model was called in the last {activity?.window_days ?? 30} days and how
+          long each call took. Only the kind of call, the model, the time and whether the reply was
+          usable are kept; what was asked and answered is never stored.
+        </p>
+        {!activity ? (
+          <Skeleton className="h-4 w-2/3" />
+        ) : activity.summary.length === 0 ? (
+          <p className="text-sm text-slate-500">No calls yet. Ask the AI to categorise, name merchants or search.</p>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b border-slate-200 text-left text-xs text-slate-500">
+                  <tr>
+                    <th className="py-1.5 pr-3 font-medium">What</th>
+                    <th className="px-3 py-1.5 text-right font-medium">Calls</th>
+                    <th className="px-3 py-1.5 text-right font-medium">Usable</th>
+                    <th className="px-3 py-1.5 text-right font-medium">Average</th>
+                    <th className="px-3 py-1.5 text-right font-medium">Slowest</th>
+                    <th className="py-1.5 pl-3 text-right font-medium">Total time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activity.summary.map((p) => (
+                    <tr key={p.purpose} className="border-b border-slate-100 last:border-0">
+                      <td className="py-1.5 pr-3">{PURPOSE[p.purpose] ?? p.purpose}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">{p.runs}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">
+                        {p.ok_runs}/{p.runs}
+                      </td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">{formatMs(p.avg_ms)}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">{formatMs(p.max_ms)}</td>
+                      <td className="py-1.5 pl-3 text-right tabular-nums">{formatMs(p.total_ms)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <h3 className="mb-1 mt-4 text-sm text-slate-600">Latest calls</h3>
+            <ul className="divide-y divide-slate-100 text-sm">
+              {activity.recent.slice(0, 10).map((r, i) => (
+                <li key={`${r.at}-${i}`} className="flex flex-wrap items-baseline justify-between gap-2 py-1.5">
+                  <span>
+                    {PURPOSE[r.purpose] ?? r.purpose}{" "}
+                    <span className="text-xs text-slate-500">
+                      {new Date(r.at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })} · {r.model}
+                    </span>
+                  </span>
+                  <span className="tabular-nums">
+                    {formatMs(r.duration_ms)}
+                    {!r.ok && <span className="ml-2 text-xs text-amber-700">unusable reply</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+        </div>
+      </section>
     </section>
   );
 }

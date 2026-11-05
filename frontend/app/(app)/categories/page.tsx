@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { AiBusy } from "@/components/AiBusy";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { LoadError, RowsSkeleton } from "@/components/states";
 import {
@@ -203,12 +204,25 @@ function ReviewTab({
               })
             }
           >
-            {status.ai_pending ? "AI is working…" : "Ask the local AI to suggest"}
+            {status.ai_pending ? "AI is working" : "Ask the local AI to suggest"}
           </button>
           <span className="text-xs text-slate-500">
             Runs on your machine through Ollama; only the description text is used. Suggestions
             below 80% confidence are left for you.
           </span>
+          {status.ai_pending && (
+            <AiBusy
+              label="The local AI is suggesting categories"
+              elapsedS={status.progress.elapsed_s}
+              etaS={status.progress.eta_s}
+              queued={status.progress.queued}
+              detail={
+                status.progress.waiting > 0
+                  ? `${status.progress.waiting} description${status.progress.waiting === 1 ? "" : "s"} to look at; suggestions appear here as it finishes.`
+                  : undefined
+              }
+            />
+          )}
         </div>
       )}
 

@@ -181,3 +181,19 @@ export function formatDate(value: string | null | undefined): string {
     year: "numeric",
   });
 }
+
+/** "45 s", "2 min 5 s", "1 h 3 min". */
+export function formatDuration(totalSeconds: number): string {
+  const s = Math.max(0, Math.round(totalSeconds));
+  if (s < 60) return `${s} s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return s % 60 ? `${m} min ${s % 60} s` : `${m} min`;
+  return `${Math.floor(m / 60)} h ${m % 60} min`;
+}
+
+/** "850 ms", "4.2 s", "2 min 5 s" for a duration in milliseconds. */
+export function formatMs(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`;
+  return formatDuration(ms / 1000);
+}

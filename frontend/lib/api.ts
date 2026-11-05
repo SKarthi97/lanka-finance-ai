@@ -338,10 +338,28 @@ export type CorrectionResult = {
   changed: number;
 };
 
+export type AiProgress = {
+  running: boolean;
+  queued: boolean;
+  elapsed_s: number | null;
+  eta_s: number | null;
+  waiting: number;
+  avg_call_s: number | null;
+};
+
 export type CategorizationStatus = {
   ai_enabled: boolean;
   ai_pending: boolean;
   uncategorised: number;
+  progress: AiProgress;
+};
+
+export type NamingStatus = { ai_enabled: boolean; unnamed: number; progress: AiProgress };
+
+export type AiActivity = {
+  window_days: number;
+  summary: { purpose: string; runs: number; ok_runs: number; avg_ms: number; max_ms: number; total_ms: number }[];
+  recent: { at: string; purpose: string; model: string; duration_ms: number; ok: boolean }[];
 };
 
 export type SuggestionGroup = {
@@ -414,6 +432,8 @@ export type SearchReading = {
   summary: string[];
   used_ai: boolean;
   ai_error: string | null;
+  took_ms: number;
+  model_ms: number | null;
 };
 
 export type SavedViewItem = { id: number; name: string; filters: ViewFilters };

@@ -7,6 +7,10 @@ const config: Config = {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./lib/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      keyframes: {
+        shimmer: { "0%": { left: "-35%" }, "100%": { left: "100%" } },
+      },
+      animation: { shimmer: "shimmer 1.4s ease-in-out infinite" },
       colors: {
         canvas: "#1a1b23", // page background
         surface: "#23252f", // cards, inputs, tables

@@ -60,6 +60,32 @@ amount is its debit or credit), `direction` (`in` / `out`). Saved views can hold
 
 `POST /api/search/interpret` `{query}` returns `{filters, summary, used_ai, ai_error}`.
 
+## Progress and AI activity
+
+Local models are slow on a CPU, so waiting has to look like working:
+
+- **`AiBusy`** (component) shows animated dots, a live timer, and a bar. When the server knows a
+  usual duration the bar fills towards it (never past 95%) and turns amber with "taking longer
+  than the usual..." if it overruns; otherwise it shimmers. Reduced-motion settings switch the
+  animation off; the text says everything. It is used on Categories ("Ask the local AI"), on
+  Transactions for **Improve names** (follows the background job every 3 s, then reloads the
+  list and says how long it took), and for "Ask in plain words" (after 0.4 s, so quick answers do
+  not flash).
+- **Where the estimate comes from** (`services/ai_activity.py`): the average of the last 30 valid
+  calls of that kind from `model_runs`, times the number of calls the job needs (descriptions
+  waiting divided by the batch size, capped at what one job covers). With no history yet there is
+  no estimate and no bar, only the timer. `GET /api/categorization/status` and
+  `GET /api/merchants/status` return `progress` (`running`, `queued`, `elapsed_s`, `eta_s`,
+  `waiting`, `avg_call_s`); the elapsed time comes from the job, so it is right after a reload.
+- **Search timing:** `POST /api/search/interpret` also returns `took_ms` (whole question) and
+  `model_ms` (waiting for the model, or null when code alone understood it). The page shows
+  "the local AI took 4.2 s" or "read in 12 ms".
+- **AI activity log** (System page, `GET /api/ai/activity`): per kind of call (categorising,
+  merchant names, search) the number of calls, how many replies were usable, average, slowest and
+  total time over 30 days, and the latest calls. It holds durations and outcomes only. **Prompts
+  and replies are never stored**, and not even the prompt hash is sent to the browser. Its use:
+  see what the chosen model really costs on this PC, and compare models after a switch.
+
 ## 4.3 Category suggestions by similarity (embeddings): analysis, not built
 
 **The idea.** Turn each description stem into a vector with a small embedding model. For an

@@ -3,6 +3,7 @@ import logging
 from fastapi import FastAPI
 
 from app.routers import (
+    ai,
     auth,
     budgets,
     categories,
@@ -47,3 +48,4 @@ app.include_router(views.router)
 app.include_router(reports.router)
 app.include_router(merchants.router)
 app.include_router(search.router)
+app.include_router(ai.router)

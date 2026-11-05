@@ -16,8 +16,14 @@ from app.models import (
     Transaction,
     UserSession,
 )
-from app.services import categorizer
-from app.services.llm_classifier import JOB_TYPE, enqueue_classification
+from app.routers.ai import ProgressOut, progress_out
+from app.services import ai_activity, categorizer
+from app.services.llm_classifier import (
+    BATCH_SIZE,
+    JOB_TYPE,
+    MAX_STEMS_PER_JOB,
+    enqueue_classification,
+)
 
 router = APIRouter(prefix="/api", tags=["categories"])
 
@@ -349,6 +355,7 @@ class StatusOut(BaseModel):
     ai_enabled: bool
     ai_pending: bool
     uncategorised: int
+    progress: ProgressOut
 
 
 @router.get("/categorization/review", response_model=ReviewOut)
@@ -411,6 +418,17 @@ def status(
         ai_enabled=settings.llm_classify_enabled,
         ai_pending=any((j.payload or {}).get("user_id") == session.user_id for j in pending),
         uncategorised=uncategorised or 0,
+        progress=progress_out(
+            ai_activity.progress(
+                db,
+                session.user_id,
+                JOB_TYPE,
+                "categorize",
+                ai_activity.categorise_waiting(db, session.user_id),
+                BATCH_SIZE,
+                MAX_STEMS_PER_JOB,
+            )
+        ),
     )
 
 

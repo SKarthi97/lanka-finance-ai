@@ -1,7 +1,9 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { AiBusy } from "@/components/AiBusy";
 import { api, ApiError, SearchReading, ViewFilters } from "@/lib/api";
+import { formatMs } from "@/lib/format";
 
 /** Type a question in plain words; it becomes ordinary filters you can see, change and save. */
 export function AskFilters({ onApply }: { onApply: (filters: ViewFilters) => void }) {
@@ -48,17 +50,24 @@ export function AskFilters({ onApply }: { onApply: (filters: ViewFilters) => voi
         </button>
       </form>
 
+      {busy && <AiBusy compact showAfterMs={400} label="Reading your question with the local AI" />}
+
       {error && (
         <p role="alert" className="text-xs text-red-700">
           {error}
         </p>
       )}
-      {reading && (
+      {reading && !busy && (
         <p role="status" className="text-xs text-slate-600">
           {reading.summary.length > 0 ? (
             <>
               Showing: <span className="font-medium">{reading.summary.join(" · ")}</span>
-              {reading.used_ai ? " · read with the local AI" : ""}. Change any filter below.
+              {reading.used_ai && reading.model_ms !== null
+                ? ` · the local AI took ${formatMs(reading.model_ms)}`
+                : reading.used_ai
+                  ? " · read with the local AI"
+                  : ` · read in ${formatMs(reading.took_ms)}`}
+              . Change any filter below.
             </>
           ) : (
             <>Nothing to filter on in that. Try a month, an amount, a bank or a category name.</>

@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { Pager } from "@/components/Pager";
 import { LoadError, RowsSkeleton } from "@/components/states";
+import { AiBusy } from "@/components/AiBusy";
 import { AskFilters } from "@/components/AskFilters";
 import { SavedViews } from "@/components/SavedViews";
 import { TransactionDetail } from "@/components/TransactionDetail";
@@ -14,6 +15,7 @@ import {
   ApiError,
   Bank,
   CategoryItem,
+  NamingStatus,
   CorrectionResult,
   Tracker,
   TransactionItem,
@@ -26,6 +28,7 @@ import {
   SOURCE_LABEL,
   formatAmount,
   formatDate,
+  formatDuration,
   formatMoney,
 } from "@/lib/format";
 
@@ -101,7 +104,9 @@ export default function TransactionsPage() {
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
   const [direction, setDirection] = useState<"" | "in" | "out">("");
-  const [namesQueued, setNamesQueued] = useState(false);
+  const [naming, setNaming] = useState<NamingStatus | null>(null);
+  const wasNaming = useRef(false);
+  const namingStarted = useRef(0);
   const [categoryFilter, setCategoryFilter] = useState(""); // "" = all, "none" = uncategorised, else an id
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
@@ -358,10 +363,42 @@ export default function TransactionsPage() {
     setPage(1);
   }
 
+  const namingActive = !!naming && (naming.progress.running || naming.progress.queued);
+
+  // Follow the naming job: look now, and every few seconds while it is active.
+  useEffect(() => {
+    let cancelled = false;
+    const look = () =>
+      api<NamingStatus>("/merchants/status")
+        .then((status) => {
+          if (!cancelled) setNaming(status);
+        })
+        .catch(() => undefined);
+    look();
+    if (!namingActive) return () => void (cancelled = true);
+    const timer = setInterval(look, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [namingActive]);
+
+  // When the job finishes, show the new names and say how long it took.
+  useEffect(() => {
+    if (namingActive) {
+      if (!wasNaming.current) namingStarted.current = Date.now();
+      wasNaming.current = true;
+    } else if (wasNaming.current) {
+      wasNaming.current = false;
+      setReloadKey((n) => n + 1);
+      setNotice(`Merchant names updated (took ${formatDuration((Date.now() - namingStarted.current) / 1000)}).`);
+    }
+  }, [namingActive]);
+
   async function nameMerchants() {
     try {
       await api("/merchants/name", { method: "POST" });
-      setNamesQueued(true);
+      setNaming(await api<NamingStatus>("/merchants/status"));
     } catch {
       setNotice("Could not start naming.");
     }
@@ -389,11 +426,17 @@ export default function TransactionsPage() {
         <button
           type="button"
           onClick={nameMerchants}
-          disabled={namesQueued}
-          title="Ask the local AI to propose clean merchant names. It sees only the repeated words of each description, never amounts."
+          disabled={namingActive || naming?.ai_enabled === false || naming?.unnamed === 0}
+          title={
+            naming?.ai_enabled === false
+              ? "The local AI is turned off"
+              : naming?.unnamed === 0
+                ? "Every merchant already has a name"
+                : "Ask the local AI to propose clean merchant names. It sees only the repeated words of each description, never amounts."
+          }
           className="rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-60"
         >
-          {namesQueued ? "Naming in the background…" : "✨ Improve names"}
+          {namingActive ? "Improving names" : naming && naming.unnamed > 0 ? `✨ Improve names (${naming.unnamed})` : "✨ Improve names"}
         </button>
         {/* A plain link: the browser downloads the file with your session cookie. */}
         <a
@@ -406,6 +449,16 @@ export default function TransactionsPage() {
         </a>
         </div>
       </div>
+
+      {namingActive && naming && (
+        <AiBusy
+          label="The local AI is improving merchant names"
+          elapsedS={naming.progress.elapsed_s}
+          etaS={naming.progress.eta_s}
+          queued={naming.progress.queued}
+          detail="You can keep using the app; names appear when it finishes."
+        />
+      )}
 
       <AskFilters onApply={applyView} />
 
