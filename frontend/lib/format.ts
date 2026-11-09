@@ -216,3 +216,10 @@ export function bankTint(code: string | null): string {
   for (const ch of code.toUpperCase()) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return BANK_TINTS[h % BANK_TINTS.length];
 }
+
+// The look of a category kind, shared by every page that shows one.
+export function kindChip(kind: string): string {
+  if (kind === "income") return "bg-green-50 text-green-800";
+  if (kind === "transfer") return "bg-sky-400/10 text-sky-300";
+  return "bg-slate-100 text-slate-600";
+}

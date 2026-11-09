@@ -12,6 +12,7 @@ import {
   MONTHS,
   MONTHS_LONG,
   NO_ACCOUNT_HINT,
+  bankTint,
   compareText,
   formatDate,
   formatMoney,
@@ -33,10 +34,12 @@ function Card({
   hint?: string;
 }) {
   const color = tone === "good" ? "text-green-700" : tone === "bad" ? "text-red-700" : "";
+  // A coloured top edge says good, bad or neutral before the number is read.
+  const edge = tone === "good" ? "border-t-green-700" : tone === "bad" ? "border-t-red-700" : "border-t-accent";
   return (
-    <div className="rounded border border-slate-200 bg-surface p-4">
-      <div className="text-xs text-slate-500">{label}</div>
-      <div className={`mt-1 text-xl font-semibold tabular-nums ${color}`}>{value}</div>
+    <div className={`rounded border border-t-2 border-slate-200 bg-surface p-4 shadow-sm ${edge}`}>
+      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
+      <div className={`mt-1 text-2xl font-semibold tabular-nums ${color}`}>{value}</div>
       {hint && <div className="mt-1 text-xs text-slate-500">{hint}</div>}
     </div>
   );
@@ -182,9 +185,14 @@ function PeriodCards({
             <tbody>
               {byBank.map((b) => (
                 <tr key={b.bank_code ?? "none"} className="border-b border-slate-100 last:border-0">
-                  <td className="px-3 py-1.5">{b.bank_name ?? "Unknown bank"}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">{formatMoney(b.income)}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">{formatMoney(b.expense)}</td>
+                  <td className="px-3 py-1.5">
+                    <span className={`mr-2 rounded px-2 py-0.5 text-xs font-medium uppercase ${bankTint(b.bank_code)}`}>
+                      {b.bank_code ?? "?"}
+                    </span>
+                    {b.bank_name ?? "Unknown bank"}
+                  </td>
+                  <td className="px-3 py-1.5 text-right tabular-nums text-green-700">{formatMoney(b.income)}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums text-red-700">{formatMoney(b.expense)}</td>
                   <td className={`px-3 py-1.5 text-right tabular-nums ${Number(b.net) < 0 ? "text-red-700" : ""}`}>
                     {formatMoney(b.net)}
                   </td>
@@ -714,10 +722,15 @@ export default function DashboardPage() {
                     const old = days !== null && days > 45;
                     const share = totalBalance > 0 && Number(b.balance) > 0 ? (Number(b.balance) / totalBalance) * 100 : 0;
                     return (
-                      <article key={index} className="rounded border border-slate-200 bg-surface p-4">
+                      <article
+                        key={index}
+                        className={`rounded border border-l-2 border-slate-200 bg-surface p-4 shadow-sm ${
+                          old ? "border-l-amber-400" : "border-l-green-700"
+                        }`}
+                      >
                         <div className="flex items-center justify-between gap-2">
                           <div>
-                            <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium uppercase">
+                            <span className={`rounded px-2 py-0.5 text-xs font-medium uppercase ${bankTint(b.bank_code)}`}>
                               {b.bank_code ?? "?"}
                             </span>
                             {b.account_last4 ? (

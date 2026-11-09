@@ -65,9 +65,17 @@ export default function SettingsPage() {
     <section className="space-y-6">
       <h1 className="text-xl font-semibold">Settings</h1>
 
-      <div className="rounded border border-slate-200 bg-surface p-5">
-        <h2 className="mb-1 font-medium">Account</h2>
-        <p className="text-sm text-slate-600">Signed in as {me?.username ?? "…"}.</p>
+      <div className="flex max-w-md items-center gap-4 rounded border border-slate-200 bg-surface p-5">
+        <span
+          aria-hidden="true"
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-accent text-lg font-semibold text-accent-fg"
+        >
+          {(me?.username ?? "?").slice(0, 2).toUpperCase()}
+        </span>
+        <div>
+          <h2 className="font-medium">Account</h2>
+          <p className="text-sm text-slate-600">Signed in as {me?.username ?? "…"}.</p>
+        </div>
       </div>
 
       <form onSubmit={changePassword} className="max-w-md space-y-3 rounded border border-slate-200 bg-surface p-5">
@@ -144,7 +152,19 @@ export default function SettingsPage() {
       </div>
 
       <div className="max-w-md rounded border border-slate-200 bg-surface p-5 text-sm">
-        <h2 className="mb-2 font-medium">Local AI</h2>
+        <h2 className="mb-2 flex items-center gap-2 font-medium">
+          Local AI
+          {ollama && (
+            <span
+              className={`inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-xs font-normal ${
+                ollama.reachable && ollama.model_present ? "bg-green-50 text-green-800" : "bg-amber-50 text-amber-400"
+              }`}
+            >
+              <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
+              {ollama.reachable && ollama.model_present ? "Ready" : "Unavailable"}
+            </span>
+          )}
+        </h2>
         {ollama === null ? (
           <p className="text-slate-500">Status unavailable.</p>
         ) : (

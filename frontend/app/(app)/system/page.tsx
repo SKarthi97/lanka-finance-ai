@@ -18,14 +18,14 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex justify-between py-1 text-sm">
       <dt className="text-slate-600">{label}</dt>
-      <dd className="font-medium">{value}</dd>
+      <dd className="font-medium text-slate-900">{value}</dd>
     </div>
   );
 }
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded border border-slate-200 bg-surface p-4">
+    <section className="rounded border border-t-2 border-slate-200 border-t-accent bg-surface p-4 shadow-sm">
       <h2 className="mb-2 font-medium">{title}</h2>
       <dl>{children}</dl>
     </section>
@@ -84,6 +84,19 @@ export default function SystemPage() {
         <Card title="Local AI (Ollama)">
           {ollama ? (
             <>
+              <Row
+                label="Status"
+                value={
+                  <span
+                    className={`inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-xs ${
+                      ollama.reachable && ollama.model_present ? "bg-green-50 text-green-800" : "bg-amber-50 text-amber-400"
+                    }`}
+                  >
+                    <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
+                    {ollama.reachable ? (ollama.model_present ? "Ready" : "Model missing") : "Not reachable"}
+                  </span>
+                }
+              />
               <Row label="Reachable" value={ollama.reachable ? "Yes" : "No"} />
               <Row label="Configured model" value={ollama.model} />
               <Row label="Model installed" value={ollama.model_present ? "Yes" : "No"} />

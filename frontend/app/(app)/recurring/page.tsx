@@ -33,15 +33,29 @@ function Table({ title, items }: { title: string; items: RecurringItem[] }) {
             {items.map((r) => {
               const state = STATE[r.state];
               return (
-                <tr key={`${r.direction}-${r.stem}`} className="border-b border-slate-100 last:border-0">
+                <tr
+                  key={`${r.direction}-${r.stem}`}
+                  className={`border-b border-slate-100 last:border-0 hover:bg-slate-50 ${
+                    r.state === "ended" ? "opacity-60" : ""
+                  }`}
+                >
                   <td className="px-3 py-2">
-                    <div className="break-words">{r.name}</div>
+                    <div className="break-words font-medium text-slate-900">{r.name}</div>
                     <div className="text-xs text-slate-500">
                       {r.category_name ?? <span className="text-amber-700">uncategorised</span>} · seen {r.count} times
                     </div>
                   </td>
-                  <td className="px-3 py-2 capitalize">{r.cadence}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatMoney(r.typical_amount)}</td>
+                  <td className="px-3 py-2">
+                    <span className="rounded bg-slate-100 px-2 py-0.5 text-xs capitalize text-slate-600">{r.cadence}</span>
+                  </td>
+                  <td
+                    className={`px-3 py-2 text-right font-medium tabular-nums ${
+                      r.direction === "income" ? "text-green-700" : "text-red-700"
+                    }`}
+                  >
+                    {r.direction === "income" ? "+ " : "− "}
+                    {formatMoney(r.typical_amount)}
+                  </td>
                   <td className="px-3 py-2 whitespace-nowrap">{formatDate(r.last_date)}</td>
                   <td className="px-3 py-2 whitespace-nowrap">{r.state === "ended" ? "–" : formatDate(r.next_expected)}</td>
                   <td className="px-3 py-2">
@@ -93,14 +107,14 @@ export default function RecurringPage() {
       {data && data.items.length > 0 && (
         <>
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded border border-slate-200 bg-surface p-4">
-              <div className="text-xs text-slate-500">Recurring payments, per month</div>
-              <div className="mt-1 text-xl font-semibold tabular-nums text-red-700">{formatMoney(data.monthly_expense)}</div>
+            <div className="rounded border border-t-2 border-slate-200 border-t-red-700 bg-surface p-4 shadow-sm">
+              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Recurring payments, per month</div>
+              <div className="mt-1 text-2xl font-semibold tabular-nums text-red-700">{formatMoney(data.monthly_expense)}</div>
               <div className="mt-1 text-xs text-slate-500">Average, excluding ones that seem to have stopped</div>
             </div>
-            <div className="rounded border border-slate-200 bg-surface p-4">
-              <div className="text-xs text-slate-500">Recurring income, per month</div>
-              <div className="mt-1 text-xl font-semibold tabular-nums text-green-700">{formatMoney(data.monthly_income)}</div>
+            <div className="rounded border border-t-2 border-slate-200 border-t-green-700 bg-surface p-4 shadow-sm">
+              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Recurring income, per month</div>
+              <div className="mt-1 text-2xl font-semibold tabular-nums text-green-700">{formatMoney(data.monthly_income)}</div>
               <div className="mt-1 text-xs text-slate-500">Average, excluding ones that seem to have stopped</div>
             </div>
           </div>

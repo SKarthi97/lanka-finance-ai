@@ -16,7 +16,7 @@ import {
   Suggestions,
   TransferSuggestions,
 } from "@/lib/api";
-import { KIND_LABEL, ORIGIN_LABEL, formatDate, formatMoney } from "@/lib/format";
+import { KIND_LABEL, ORIGIN_LABEL, formatDate, formatMoney, kindChip } from "@/lib/format";
 
 type Tab = "review" | "suggestions" | "transfers" | "categories" | "rules";
 
@@ -135,8 +135,8 @@ export default function CategoriesPage() {
             role="tab"
             aria-selected={tab === t.id}
             onClick={() => setTab(t.id)}
-            className={`-mb-px border-b-2 px-3 py-2 text-sm ${
-              tab === t.id ? "border-accent font-medium" : "border-transparent text-slate-600"
+            className={`-mb-px rounded-t border-b-2 px-3 py-2 text-sm hover:bg-slate-100 ${
+              tab === t.id ? "border-accent font-medium text-slate-900" : "border-transparent text-slate-600"
             }`}
           >
             {t.label}
@@ -515,7 +515,9 @@ function CategoriesTab({ categories, run }: { categories: CategoryItem[]; run: R
                   {c.name}
                   {c.is_system && <span className="ml-2 text-xs text-slate-400">built in</span>}
                 </td>
-                <td className="px-3 py-2">{KIND_LABEL[c.kind]}</td>
+                <td className="px-3 py-2">
+                  <span className={`rounded px-2 py-0.5 text-xs ${kindChip(c.kind)}`}>{KIND_LABEL[c.kind]}</span>
+                </td>
                 <td className="px-3 py-2 text-right tabular-nums">{c.transactions}</td>
                 <td className="px-3 py-2 text-right">
                   {!c.is_system && (

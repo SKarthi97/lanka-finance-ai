@@ -81,6 +81,12 @@ export default function BudgetsPage() {
     if (newCategory && newAmount) save(Number(newCategory), newAmount);
   }
 
+  function step(by: number) {
+    const moved = new Date(year, month - 1 + by, 1);
+    setYear(moved.getFullYear());
+    setMonth(moved.getMonth() + 1);
+  }
+
   const budgeted = new Set((data?.items ?? []).map((b) => b.category_id));
   const available = categories.filter((c) => c.kind === "expense" && !budgeted.has(c.id));
   const years = Array.from(new Set([now.getFullYear() - 2, now.getFullYear() - 1, now.getFullYear(), year])).sort();
@@ -90,7 +96,17 @@ export default function BudgetsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">Budgets</h1>
         <div className="flex items-center gap-2 text-sm">
-          <span className="text-slate-600">Month</span>
+          <div className="flex items-center overflow-hidden rounded border border-slate-300">
+            <button type="button" onClick={() => step(-1)} aria-label="Previous month" className="px-2.5 py-1.5 hover:bg-slate-100">
+              ‹
+            </button>
+            <span className="border-l border-slate-300 px-3 py-1.5 tabular-nums">
+              {MONTHS_LONG[month - 1]} {year}
+            </span>
+            <button type="button" onClick={() => step(1)} aria-label="Next month" className="border-l border-slate-300 px-2.5 py-1.5 hover:bg-slate-100">
+              ›
+            </button>
+          </div>
           <select aria-label="Year" value={year} onChange={(e) => setYear(Number(e.target.value))} className={select}>
             {years.map((y) => (
               <option key={y}>{y}</option>
@@ -127,16 +143,29 @@ export default function BudgetsPage() {
       {data && (
         <>
           {data.items.length > 0 && (
-            <div className="rounded border border-slate-200 bg-surface p-4 text-sm">
-              <span className="font-medium">
-                {MONTHS_LONG[month - 1]} {year}:
-              </span>{" "}
-              {formatMoney(data.total_spent)} spent of {formatMoney(data.total_limit)} budgeted
-              {data.over > 0 && (
-                <span className="ml-2 text-red-700">
-                  · {data.over} categor{data.over === 1 ? "y" : "ies"} over
+            <div className="rounded border border-t-2 border-slate-200 border-t-accent bg-surface p-4 text-sm shadow-sm">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  {MONTHS_LONG[month - 1]} {year}, all budgets
                 </span>
-              )}
+                {data.over > 0 && (
+                  <span className="rounded bg-red-50 px-2 py-0.5 text-xs text-red-700">
+                    {data.over} categor{data.over === 1 ? "y" : "ies"} over
+                  </span>
+                )}
+              </div>
+              <div className="mt-1 text-2xl font-semibold tabular-nums">
+                {formatMoney(data.total_spent)}{" "}
+                <span className="text-base font-normal text-slate-500">of {formatMoney(data.total_limit)} budgeted</span>
+              </div>
+              <div className="mt-2 h-2 rounded bg-slate-100" aria-hidden="true">
+                <div
+                  className={`h-2 rounded ${Number(data.total_spent) > Number(data.total_limit) ? "bg-red-500" : "bg-accent"}`}
+                  style={{
+                    width: `${Math.min(100, Number(data.total_limit) > 0 ? (Number(data.total_spent) / Number(data.total_limit)) * 100 : 0)}%`,
+                  }}
+                />
+              </div>
             </div>
           )}
 
@@ -149,7 +178,12 @@ export default function BudgetsPage() {
               {data.items.map((b) => {
                 const over = b.state === "over";
                 return (
-                  <li key={b.category_id} className="rounded border border-slate-200 bg-surface p-4">
+                  <li
+                    key={b.category_id}
+                    className={`rounded border border-l-2 border-slate-200 bg-surface p-4 ${
+                      over ? "border-l-red-500" : b.state === "near" ? "border-l-amber-400" : "border-l-green-700"
+                    }`}
+                  >
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
                       <span className="font-medium">{b.category_name}</span>
                       <span className={`text-sm tabular-nums ${over ? "text-red-700" : "text-slate-600"}`}>
