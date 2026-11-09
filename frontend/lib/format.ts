@@ -197,3 +197,22 @@ export function formatMs(ms: number): string {
   if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`;
   return formatDuration(ms / 1000);
 }
+
+// Each bank keeps one colour, so rows from different banks are told apart at a glance.
+const BANK_TINTS = [
+  "bg-sky-400/15 text-sky-300",
+  "bg-fuchsia-400/15 text-fuchsia-300",
+  "bg-emerald-400/15 text-emerald-300",
+  "bg-orange-400/15 text-orange-300",
+  "bg-violet-400/15 text-violet-300",
+  "bg-rose-400/15 text-rose-300",
+  "bg-teal-400/15 text-teal-300",
+  "bg-yellow-400/15 text-yellow-300",
+];
+
+export function bankTint(code: string | null): string {
+  if (!code) return "bg-slate-100 text-slate-600";
+  let h = 0;
+  for (const ch of code.toUpperCase()) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return BANK_TINTS[h % BANK_TINTS.length];
+}

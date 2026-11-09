@@ -25,6 +25,7 @@ import {
 import {
   MONTHS_LONG,
   NO_ACCOUNT_HINT,
+  bankTint,
   SOURCE_LABEL,
   formatAmount,
   formatDate,
@@ -45,25 +46,6 @@ function categoryTint(kind: "income" | "expense" | "transfer" | undefined): stri
   if (kind === "expense") return "border-slate-200 bg-surface";
   if (kind === "transfer") return "border-sky-400/40 bg-sky-400/10 text-sky-300";
   return "border-amber-400/50 bg-amber-50 text-amber-400"; // uncategorised: needs a look
-}
-
-// Each bank keeps one colour, so rows from different banks are told apart at a glance.
-const BANK_TINTS = [
-  "bg-sky-400/15 text-sky-300",
-  "bg-fuchsia-400/15 text-fuchsia-300",
-  "bg-emerald-400/15 text-emerald-300",
-  "bg-orange-400/15 text-orange-300",
-  "bg-violet-400/15 text-violet-300",
-  "bg-rose-400/15 text-rose-300",
-  "bg-teal-400/15 text-teal-300",
-  "bg-yellow-400/15 text-yellow-300",
-];
-
-function bankTint(code: string | null): string {
-  if (!code) return "bg-slate-100 text-slate-600";
-  let h = 0;
-  for (const ch of code.toUpperCase()) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return BANK_TINTS[h % BANK_TINTS.length];
 }
 
 function monthTitle(date: string): string {
