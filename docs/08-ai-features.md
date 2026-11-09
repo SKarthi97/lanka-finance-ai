@@ -106,27 +106,53 @@ Whether it is worth having depends on your data, so:
 
 ```
 docker compose exec ollama ollama pull nomic-embed-text
-docker compose exec backend python -m app.tools.eval_embeddings             # your corrections
-docker compose exec backend python -m app.tools.eval_embeddings --synthetic # invented set, no data needed
+docker compose exec backend python -m app.tools.eval_embeddings --synthetic   # 78 invented descriptions
+docker compose exec backend python -m app.tools.eval_embeddings               # your own corrections
+docker compose exec backend python -m app.tools.eval_embeddings --task none   # without the task word
 ```
 
-The tool hides each of your labelled descriptions in turn and predicts it from the others, over a
-grid of similarity and agreement settings. It prints **counts and percentages only** (never a
-description, category name or amount), the "always the biggest category" baseline, and a verdict:
-it recommends settings only if some row reaches 90% accuracy while covering at least 15% of your
-labelled descriptions (`--min-accuracy`, `--min-coverage`). Then set, in `.env`:
+The tool hides each labelled description in turn and predicts it from the others. It prints
+**aggregates only** (counts, percentages, average similarities; never a description, category name or
+amount) in three parts: (1) how well the model separates the categories (closest-neighbour
+similarity, average similarity inside a category against between categories, and how often the
+single closest neighbour is in the right category); (2) the table for the app's own rule over
+similarity floors 0.50 to 0.90; (3) the same allowing one neighbour, as a diagnostic only. Zeros
+everywhere mean the similarity floor is above what the model produces, or too few descriptions share
+a category; part 1 says which. It recommends settings only if a row of part 2 reaches 90% accuracy
+while covering at least 15% of the labelled descriptions (`--min-accuracy`, `--min-coverage`). Then
+set, in `.env`:
 
 ```
 EMBED_SUGGEST_ENABLED=true
 EMBED_MIN_SIMILARITY=0.80   # from the tool's verdict
 EMBED_MIN_AGREE=0.80
+EMBED_MIN_NEIGHBOURS=2
 ```
 
-It also needs at least 20 descriptions you categorised yourself (`embed_min_labelled`); below that
-it stays quiet. Vectors are cached per stem and model (`stem_embeddings`, migration 0014, about
-3 KB each), so only new stems are embedded. A missing model or an unusable answer just skips the
-tier. `GET /api/ai/similarity` reports the state (shown on the Categories page). numpy is the one
-new dependency.
+**The task word.** `nomic-embed-text` expects a word before each text saying what the vector is
+for. The app sends `classification: <stem>` (`EMBED_TASK`, `none` to send the text as it is). Without
+it unrelated short strings score close together and similarity separates poorly. Vectors are cached
+per model and task word, so changing it re-embeds. Which word is best is measured, not assumed:
+compare `--task classification`, `--task clustering` and `--task none` on the same data.
+
+**Measured on the invented set (78 descriptions, 13 categories of 6, `nomic-embed-text`).** With the
+task word `classification`, the single closest neighbour was in the right category 76% of the time
+(64% without the word), and the neighbour vote at similarity 0.80, agreement 0.80, two neighbours gave
+29 hints (37% of the descriptions), all 29 right. Without the word the same rule gave 1 hint, and its
+best row was 24 hints at floor 0.50. So the word helps, and the defaults are that measured row. The
+set is generic wording: it shows the model can separate ordinary descriptions, not how it does on
+your merchants. With the word, similarities sit high (10% of closest neighbours below 0.77), so
+floors below about 0.77 change little and the agreement setting does the work.
+
+**Thresholds depend on the model.** The defaults (0.80 similarity) are a starting point; real
+embedding models put short strings in different ranges, which is why the tool scans 0.50 to 0.90 and
+part 1 shows where your closest neighbours actually sit.
+
+A hint needs at least 20 descriptions you categorised yourself (`embed_min_labelled`); below that it
+stays quiet, and a neighbour vote only starts to be meaningful with several per category. Vectors are
+cached per stem (`stem_embeddings`, migration 0014, about 3 KB each), so only new stems are embedded.
+A missing model or an unusable answer just skips the tier. `GET /api/ai/similarity` reports the state
+(shown on the Categories page). numpy is the one new dependency.
 
 ## The month in words (4.4)
 

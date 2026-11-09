@@ -88,7 +88,7 @@ def similarity(
     embedded = db.scalar(
         select(func.count())
         .select_from(StemEmbedding)
-        .where(StemEmbedding.user_id == session.user_id, StemEmbedding.model == settings.ollama_embed_model)
+        .where(StemEmbedding.user_id == session.user_id, StemEmbedding.model == embeddings.cache_key(settings))
     )
     return SimilarityOut(
         enabled=settings.embed_enabled,

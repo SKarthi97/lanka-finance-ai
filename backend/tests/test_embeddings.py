@@ -167,7 +167,8 @@ def test_only_stems_are_embedded(prepared, session_factory, test_settings):
     seen: list = []
     run_ai(session_factory, test_settings, fake_ollama(seen, [{"results": []}]))
     texts = [t for body in embed_calls(seen) for t in body["input"]]
-    assert set(texts) == set(LABELLED + UNLABELLED)
+    assert {t.removeprefix("classification: ") for t in texts} == set(LABELLED + UNLABELLED)
+    assert all(t.startswith("classification: ") for t in texts)  # the task word nomic-embed-text expects
     assert all(not any(c.isdigit() for c in t) for t in texts)  # no amounts, dates or numbers
     assert {b["model"] for b in embed_calls(seen)} == {EMBED_MODEL}
 
@@ -283,4 +284,135 @@ def test_the_synthetic_set_is_usable():
     from app.tools import eval_embeddings
 
     labels = eval_embeddings.synthetic_labels()
-    assert len(labels) >= 20 and len(set(labels.values())) >= 5
+    per_class = {c: list(labels.values()).count(c) for c in set(labels.values())}
+    assert len(labels) >= 70 and len(per_class) == 13
+    assert min(per_class.values()) >= 5  # enough per category for a neighbour vote
+
+
+# --- the task word, the neighbour count and the diagnostics ---------------------------------------------------
+
+
+def test_the_task_word_can_be_turned_off(prepared, session_factory, test_settings):
+    test_settings.embed_task = ""
+    seen: list = []
+    run_ai(session_factory, test_settings, fake_ollama(seen, [{"results": []}]))
+    texts = [t for body in embed_calls(seen) for t in body["input"]]
+    assert set(texts) == set(LABELLED + UNLABELLED)  # sent as they are
+
+
+def test_vectors_are_cached_per_task_word(prepared, session_factory, test_settings):
+    run_ai(session_factory, test_settings, fake_ollama([], [{"results": []}]))
+    test_settings.embed_task = "clustering"
+    with session_factory() as db:
+        before = db.scalar(select(func.count()).select_from(StemEmbedding))
+        embeddings.vectors_for(db, test_settings, 1, LABELLED, fake_ollama([], []))
+        db.commit()
+        keys = set(db.scalars(select(StemEmbedding.model)))
+        assert db.scalar(select(func.count()).select_from(StemEmbedding)) == before + 3  # embedded again
+    assert keys == {"nomic-embed-text|classification", "nomic-embed-text|clustering"}
+
+
+def test_the_neighbour_count_is_a_setting(prepared, session_factory, test_settings):
+    test_settings.embed_min_neighbours = 4  # only three labelled neighbours exist
+    counts = run_ai(session_factory, test_settings, fake_ollama([], [{"results": []}]))
+    assert counts["similar"] == 0
+
+
+def test_the_similarity_report_describes_the_separation():
+    labels, vectors = clustered(n_classes=3, per_class=8)
+    r = embeddings.similarity_report(vectors, list(labels.values()))
+    assert r["n"] == 24 and r["eligible"] == 24
+    assert r["same"] > r["different"] + 0.5 and r["nearest_same"] == 1.0
+    assert r["nearest_p50"] > 0.9
+
+
+def test_the_report_counts_descriptions_with_no_category_mate():
+    vectors = np.eye(4, dtype=np.float32)
+    r = embeddings.similarity_report(vectors, [1, 1, 2, 3])
+    assert r["eligible"] == 2 and r["same"] is not None
+
+
+def test_the_tool_explains_why_nothing_was_suggested_when_data_is_sparse(capsys):
+    from app.tools import eval_embeddings
+
+    rng = np.random.default_rng(5)
+    vectors = rng.normal(size=(12, 16)).astype(np.float32)
+    vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
+    labels = {f"S{i}": i + 1 for i in range(12)}  # every description alone in its category
+    assert eval_embeddings.run(labels, vectors, 5, 0.90, 0.15) == 1
+    out = capsys.readouterr().out
+    assert "1. How the model separates your categories" in out
+    assert "Too few descriptions share a category" in out
+    assert "3. Diagnostic only" in out and "S0" not in out
+
+
+def test_the_tool_flags_a_model_that_cannot_tell_categories_apart(capsys):
+    from app.tools import eval_embeddings
+
+    rng = np.random.default_rng(9)
+    base = rng.normal(size=16)
+    vectors = (base + rng.normal(scale=0.01, size=(20, 16))).astype(np.float32)  # all nearly identical
+    vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
+    labels = {f"S{i}": i % 4 + 1 for i in range(20)}
+    eval_embeddings.run(labels, vectors, 5, 0.90, 0.15)
+    assert "barely tells one category from another" in capsys.readouterr().out
+
+
+def test_the_tool_covers_lower_similarities_too(capsys):
+    from app.tools import eval_embeddings
+
+    labels, vectors = clustered()
+    eval_embeddings.run(labels, vectors, 5, 0.90, 0.15)
+    assert "          0.50" in capsys.readouterr().out
+
+
+# The two tables from a real run on the synthetic set (78 descriptions), as (similarity, agree, suggested, right).
+WITH_TASK_WORD = [
+    (0.50, 0.60, 50, 48), (0.50, 0.80, 40, 39), (0.50, 1.00, 14, 14),
+    (0.70, 0.60, 50, 47), (0.70, 0.80, 41, 40), (0.70, 1.00, 17, 17),
+    (0.75, 0.60, 48, 44), (0.75, 0.80, 40, 39), (0.75, 1.00, 24, 23),
+    (0.80, 0.60, 37, 36), (0.80, 0.80, 29, 29), (0.80, 1.00, 26, 26),
+    (0.85, 0.60, 20, 20), (0.85, 0.80, 20, 20), (0.85, 1.00, 20, 20),
+    (0.90, 0.60, 0, 0),
+]  # fmt: skip
+WITHOUT_TASK_WORD = [
+    (0.50, 0.60, 43, 39), (0.50, 0.80, 24, 24), (0.50, 1.00, 9, 9),
+    (0.60, 0.80, 18, 17), (0.65, 0.60, 30, 29), (0.65, 0.80, 18, 18), (0.65, 1.00, 13, 13),
+    (0.70, 0.60, 21, 19), (0.75, 0.80, 8, 8), (0.80, 0.80, 1, 1),
+]  # fmt: skip
+
+
+def test_the_recommendation_is_the_most_accurate_row_not_the_widest():
+    from app.tools import eval_embeddings
+
+    # 100% rows: the widest of them is 0.80 / 0.80 with 29 hints (not 0.50 / 0.60, which is 96% on 50)
+    assert eval_embeddings.pick(WITH_TASK_WORD, 78, 0.90, 0.15) == (0.80, 0.80, 29, 29)
+    assert eval_embeddings.pick(WITHOUT_TASK_WORD, 78, 0.90, 0.15) == (0.50, 0.80, 24, 24)
+
+
+def test_a_row_with_too_few_hints_never_counts():
+    from app.tools import eval_embeddings
+
+    assert eval_embeddings.pick([(0.80, 0.80, 8, 8)], 78, 0.90, 0.05) is None  # 8 < 10 hints
+    assert eval_embeddings.pick([(0.80, 0.80, 12, 12)], 78, 0.90, 0.20) is None  # covers only 15%
+    assert eval_embeddings.pick([(0.80, 0.80, 20, 17)], 78, 0.90, 0.15) is None  # 85% accurate
+    assert eval_embeddings.pick([], 78, 0.90, 0.15) is None
+
+
+def test_the_defaults_are_the_row_the_real_run_recommended():
+    from app.config import Settings
+
+    s = Settings()
+    assert (s.embed_min_similarity, s.embed_min_agree, s.embed_min_neighbours, s.embed_k) == (0.80, 0.80, 2, 5)
+    assert s.embed_task == "classification"
+
+
+def test_the_tool_marks_the_recommended_row(capsys):
+    from app.tools import eval_embeddings
+
+    labels, vectors = clustered()
+    eval_embeddings.run(labels, vectors, 5, 0.90, 0.15)
+    out = capsys.readouterr().out
+    assert out.count("(recommended)") == 1
+    assert "read the accuracy as approximate" in out
+

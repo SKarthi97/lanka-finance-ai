@@ -50,6 +50,16 @@ class Suggestion:
 # --- embedding -------------------------------------------------------------------------------------
 
 
+def cache_key(settings: Settings) -> str:
+    """Vectors depend on the model AND the task word, so both name the cache."""
+    return f"{settings.ollama_embed_model}|{settings.embed_task}"[:64]
+
+
+def _prefixed(settings: Settings, texts: list[str]) -> list[str]:
+    prefix = f"{settings.embed_task}: " if settings.embed_task else ""
+    return [prefix + t for t in texts]
+
+
 def embed_texts(
     db: Session,
     settings: Settings,
@@ -70,7 +80,7 @@ def embed_texts(
             began = time.perf_counter()
             vectors: list | None = None
             try:
-                reply = client.post("/api/embed", json={"model": model, "input": batch})
+                reply = client.post("/api/embed", json={"model": model, "input": _prefixed(settings, batch)})
                 reply.raise_for_status()
                 vectors = reply.json().get("embeddings")
             except (httpx.HTTPError, ValueError):
@@ -109,7 +119,7 @@ def vectors_for(
 ) -> dict[str, np.ndarray]:
     """Vectors for these stems, from the cache where possible, embedding and storing the rest.
     The caller commits."""
-    model = settings.ollama_embed_model
+    model = cache_key(settings)
     found: dict[str, np.ndarray] = {}
     for start in range(0, len(stems), _IN_CHUNK):
         chunk = stems[start : start + _IN_CHUNK]
@@ -197,13 +207,14 @@ def leave_one_out(
     k: int,
     min_similarity: float,
     min_agree: float,
+    min_neighbours: int = 2,
 ) -> tuple[int, int]:
     """(suggested, right): hide each label, predict it from all the others."""
     sims = vectors @ vectors.T
     np.fill_diagonal(sims, -1.0)  # a label never votes for itself (below any similarity floor)
     suggested = right = 0
     for i in range(len(categories)):
-        result = vote(sims[i], categories, k, min_similarity, min_agree)
+        result = vote(sims[i], categories, k, min_similarity, min_agree, min_neighbours)
         if result is not None:
             suggested += 1
             right += result.category_id == categories[i]
@@ -233,7 +244,46 @@ def suggest(
     found: dict[str, Suggestion] = {}
     for stem in wanted:
         sims = matrix @ vectors[stem]
-        result = vote(sims, categories, settings.embed_k, settings.embed_min_similarity, settings.embed_min_agree)
+        result = vote(
+            sims,
+            categories,
+            settings.embed_k,
+            settings.embed_min_similarity,
+            settings.embed_min_agree,
+            settings.embed_min_neighbours,
+        )
         if result is not None:
             found[stem] = result
     return found
+
+
+def similarity_report(vectors: np.ndarray, categories: list[int]) -> dict:
+    """Aggregate facts about how the embeddings separate your categories (no text, no names).
+
+    nearest_*: percentiles of each description's closest neighbour's similarity.
+    same / different: mean similarity between two descriptions in the same / in different categories.
+    nearest_same: share of descriptions whose single closest neighbour is in their own category.
+    eligible: descriptions that have at least one other description in their category (the only
+    ones a neighbour vote could ever get right).
+    """
+    sims = vectors @ vectors.T
+    np.fill_diagonal(sims, -1.0)
+    cats = np.asarray(categories)
+    same_mask = cats[:, None] == cats[None, :]
+    np.fill_diagonal(same_mask, False)
+    different_mask = ~same_mask
+    np.fill_diagonal(different_mask, False)
+
+    nearest = sims.max(axis=1)
+    nearest_index = sims.argmax(axis=1)
+    sizes = {c: categories.count(c) for c in set(categories)}
+    return {
+        "n": len(categories),
+        "nearest_p10": float(np.percentile(nearest, 10)),
+        "nearest_p50": float(np.percentile(nearest, 50)),
+        "nearest_p90": float(np.percentile(nearest, 90)),
+        "same": float(sims[same_mask].mean()) if same_mask.any() else None,
+        "different": float(sims[different_mask].mean()) if different_mask.any() else None,
+        "nearest_same": float(np.mean(cats[nearest_index] == cats)),
+        "eligible": sum(1 for c in categories if sizes[c] >= 2),
+    }

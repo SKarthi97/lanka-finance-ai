@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     # data: pull the model, run `python -m app.tools.eval_embeddings`, then set EMBED_SUGGEST_ENABLED.
     embed_enabled: bool = False
     ollama_embed_model: str = "nomic-embed-text"
+    # nomic-embed-text expects a task word before each text ("classification: ..."). Without it
+    # unrelated short strings score close together. Empty: send the text as it is.
+    embed_task: str = "classification"
+    embed_min_neighbours: int = 2  # how many close, agreeing neighbours a hint needs
     embed_k: int = 5  # nearest labelled descriptions consulted
     embed_min_similarity: float = 0.80  # neighbours less similar than this are ignored
     embed_min_agree: float = 0.80  # share of the neighbours that must agree
