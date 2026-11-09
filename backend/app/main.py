@@ -8,6 +8,7 @@ from app.routers import (
     budgets,
     categories,
     documents,
+    insights,
     merchants,
     notifications,
     overview,
@@ -49,3 +50,4 @@ app.include_router(reports.router)
 app.include_router(merchants.router)
 app.include_router(search.router)
 app.include_router(ai.router)
+app.include_router(insights.router)

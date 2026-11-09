@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { api, ApiError, TransactionItem } from "@/lib/api";
-import { NO_ACCOUNT_HINT, SOURCE_LABEL, formatAmount, formatDate, formatMoney } from "@/lib/format";
+import { AiBusy } from "@/components/AiBusy";
+import { api, ApiError, FlagExplanation, TransactionItem, TxFlag } from "@/lib/api";
+import { NO_ACCOUNT_HINT, SOURCE_LABEL, formatAmount, formatDate, formatMoney, formatMs } from "@/lib/format";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -29,6 +30,32 @@ export function TransactionDetail({
   const [nameMessage, setNameMessage] = useState<string | null>(null);
 
   useEffect(() => setName(t.merchant), [t.merchant]);
+
+  // Why this row is flagged: fixed sentences from the app's own checks, loaded when it opens.
+  const [flags, setFlags] = useState<TxFlag[]>([]);
+  const [explained, setExplained] = useState<FlagExplanation | null>(null);
+  const [explaining, setExplaining] = useState(false);
+  const [explainError, setExplainError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setExplained(null);
+    setExplainError(null);
+    api<{ flags: TxFlag[] }>(`/transactions/${t.id}/flags`)
+      .then((result) => setFlags(result.flags))
+      .catch(() => setFlags([]));
+  }, [t.id]);
+
+  async function explain() {
+    setExplaining(true);
+    setExplainError(null);
+    try {
+      setExplained(await api<FlagExplanation>(`/transactions/${t.id}/explain`, { method: "POST" }));
+    } catch (err) {
+      setExplainError(err instanceof ApiError ? err.message : "Could not explain this.");
+    } finally {
+      setExplaining(false);
+    }
+  }
 
   async function saveName(event: FormEvent) {
     event.preventDefault();
@@ -103,6 +130,56 @@ export function TransactionDetail({
           {isDebit ? "−" : "+"}
           {formatAmount(isDebit ? t.debit : t.credit)}
         </p>
+
+        {flags.length > 0 && (
+          <section
+            aria-label="Why this is flagged"
+            className="mb-4 rounded border border-l-4 border-amber-200 border-l-amber-400 bg-amber-50 p-3 text-sm text-amber-900"
+          >
+            <h3 className="mb-1 font-medium">Why this is flagged</h3>
+            <ul className="list-disc space-y-1 pl-5">
+              {flags.map((f) => (
+                <li key={f.code}>{f.title}</li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              onClick={explain}
+              disabled={explaining}
+              title="The local AI sees only the reasons above, the money direction and the category; never the description, amount or date."
+              className="mt-3 rounded border border-amber-400 px-3 py-1 text-xs hover:bg-amber-100 disabled:opacity-60"
+            >
+              ✨ Explain in plain words
+            </button>
+            {explaining && (
+              <div className="mt-2">
+                <AiBusy compact showAfterMs={300} label="The local AI is explaining" />
+              </div>
+            )}
+            {explainError && (
+              <p role="alert" className="mt-2 text-xs text-red-700">
+                {explainError}
+              </p>
+            )}
+            {explained?.explanation && (
+              <div className="mt-3 space-y-1 border-t border-amber-200 pt-2">
+                <p>{explained.explanation}</p>
+                {explained.check && (
+                  <p>
+                    <span className="font-medium">Check: </span>
+                    {explained.check}
+                  </p>
+                )}
+                {explained.model_ms !== null && (
+                  <p className="text-xs opacity-70">Written by the local AI in {formatMs(explained.model_ms)}.</p>
+                )}
+              </div>
+            )}
+            {explained && !explained.explanation && explained.ai_note && (
+              <p className="mt-2 text-xs">{explained.ai_note}</p>
+            )}
+          </section>
+        )}
 
         <form onSubmit={saveName} className="mb-4 rounded border border-slate-200 bg-surface p-3 text-sm">
           <label htmlFor="merchant-name" className="mb-1 block text-xs text-slate-500">

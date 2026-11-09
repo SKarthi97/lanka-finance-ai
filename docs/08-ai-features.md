@@ -1,4 +1,4 @@
-# AI features: merchant names, plain-words search, and the embedding analysis
+# AI features: names, search, similarity hints, summaries, flag explanations
 
 Rule for every feature here: **code computes, the local model only labels.** The model runs in
 the Ollama container on the internal network; nothing goes to the internet. It never sees
@@ -86,67 +86,136 @@ Local models are slow on a CPU, so waiting has to look like working:
   and replies are never stored**, and not even the prompt hash is sent to the browser. Its use:
   see what the chosen model really costs on this PC, and compare models after a switch.
 
-## 4.3 Category suggestions by similarity (embeddings): analysis, not built
+## Similarity hints, "like ones you chose" (4.3)
 
-**The idea.** Turn each description stem into a vector with a small embedding model. For an
-uncategorised stem, find the nearest stems you have already categorised and suggest what most of
-them have. Today a correction teaches only that exact stem (a `contains` rule); a similar-looking
-merchant is still unknown to the rules.
+Built, **off by default**, and meant to be measured on your own corrections before it is turned on.
 
-**What exists now, so the gap is clear.** Built-in rules (generic words), your rules and
-corrections (exact stems), `cluster_stems` (typo-level string similarity, 0.9), and the local
-model with your confirmed rules as examples (picked by shared words). Measured on 41 synthetic
-descriptions, `qwen2.5:3b` with category names answers 36 and gets 32 right, takes about 173 s,
-and reports a confidence of about 1.00 for nearly everything, so its confidence does not separate
-right from wrong.
+**What it does.** Each description stem is turned into a vector by a small local embedding model
+(Ollama `/api/embed`, default `nomic-embed-text`). For an uncategorised stem the app looks at its
+5 nearest stems among those **you categorised yourself** (manual choices and rules you made or
+learned from corrections; never built-in rules or earlier AI guesses). Neighbours at least 0.80
+similar vote, weighted by similarity; a hint needs two or more of them and 80% of the vote on one
+category. The hint goes to Review as "Like ones you chose: Fuel (72%)", with "Similar to 4
+descriptions you categorised" as the reason. It is **never applied automatically**. Stems that get a
+hint skip the slow chat model; the rest go on to it as before. The "confidence" is agreement
+times average similarity: a ranking, not a probability.
 
-**What embeddings would add**
+**Why it is measured first.** Small English embedding models know few Sri Lankan merchant names,
+so for brands the similarity may come only from shared generic words that rules already catch.
+Whether it is worth having depends on your data, so:
 
-| Gain | Why it is real |
+```
+docker compose exec ollama ollama pull nomic-embed-text
+docker compose exec backend python -m app.tools.eval_embeddings             # your corrections
+docker compose exec backend python -m app.tools.eval_embeddings --synthetic # invented set, no data needed
+```
+
+The tool hides each of your labelled descriptions in turn and predicts it from the others, over a
+grid of similarity and agreement settings. It prints **counts and percentages only** (never a
+description, category name or amount), the "always the biggest category" baseline, and a verdict:
+it recommends settings only if some row reaches 90% accuracy while covering at least 15% of your
+labelled descriptions (`--min-accuracy`, `--min-coverage`). Then set, in `.env`:
+
+```
+EMBED_SUGGEST_ENABLED=true
+EMBED_MIN_SIMILARITY=0.80   # from the tool's verdict
+EMBED_MIN_AGREE=0.80
+```
+
+It also needs at least 20 descriptions you categorised yourself (`embed_min_labelled`); below that
+it stays quiet. Vectors are cached per stem and model (`stem_embeddings`, migration 0014, about
+3 KB each), so only new stems are embedded. A missing model or an unusable answer just skips the
+tier. `GET /api/ai/similarity` reports the state (shown on the Categories page). numpy is the one
+new dependency.
+
+## The month in words (4.4)
+
+On the Report page, "The month in words" is in two layers:
+
+1. **Written by code, always shown:** income, spending and net with the real amounts; change on
+   the previous month; share kept; the biggest three categories; the category that rose most;
+   budgets over or close; overdue recurring payments; uncategorised count.
+2. **A friendly paragraph from the local AI, on request** (**Add a friendly paragraph**). It is
+   given the facts **without any amount**: percentages, counts and category names. What it writes
+   is checked (`services/llm_guard.py`): every number in it must already be in those facts, it must
+   not mention money (LKR, Rs, a currency sign), and it must not contain markup. A paragraph that
+   breaks a rule is dropped and the page says so; the code-written bullets are unaffected.
+
+`POST /api/summary` `{year, month, ai}` returns `{bullets, narrative, used_ai, ai_note, took_ms,
+model_ms}`. It prints with the report.
+
+## Explain a flagged transaction (4.5)
+
+**Code decides what is unusual** (`services/flags.py`) and writes each reason as a fixed sentence,
+shown under "Why this is flagged" in a transaction's detail panel:
+
+| Reason | When |
 |---|---|
-| Speed: milliseconds per stem against minutes for the chat model | The whole uncategorised list could be suggested at once, instantly, as a first tier |
-| A score that can be tested | Cosine similarity plus "how many of the k nearest agree" can be thresholded and measured on your own labels, unlike the chat model's constant 1.00 |
-| Generalisation beyond exact words | "PHARMACY" next to "PHARMA", "PETROL" next to "FUEL", a typo or a different branch word |
-| Better examples for the chat model | The few examples in its prompt could be the nearest confirmed ones instead of word-overlap matches |
+| row_balance_mismatch, row_amounts_invalid, suspicious_date_gap, date_outside_period, ... | the statement check doubted this row |
+| statement_not_reconciled | its statement is held for review |
+| large_for_category | at least 3 times the usual (median) for its category **and** in your top 10% for it; needs 5 comparable payments |
+| first_time_large | a payee seen once, among your largest payments; needs 30 payments |
+| possible_double_charge | same description and amount within a day |
+| negative_balance | the balance after the row is below zero |
 
-**Honest limits**
+History checks use reconciled or accepted statements only and leave out repeated rows.
+**Explain in plain words** asks the local AI to rephrase the reasons for a non-expert and say what to
+check. It is given the reasons, the money direction and the category name, and **nothing else: no
+description (untrusted PDF text), no amount, no date, no account**. Its answer passes the same number
+guard and is dropped if it adds a figure. With the AI off or failing, the code-written reasons remain.
 
-1. **Sri Lankan merchants are mostly unknown to small English embedding models.** Keells,
-   Cargills, Arpico, Dialog, SLT, CEB, LECO sit near random in the space; similarity then comes
-   from shared generic words, which rules and substring matching already catch. The gain is
-   largest for descriptions made of ordinary words and smallest for brand names, and brand names
-   are most of what is left uncategorised.
-2. **Bank strings are cryptic** (`IPG PAYMENT`, `CEFT`, `TRF`). Short, jargon-heavy stems embed
-   poorly.
-3. **Class imbalance:** most of your labels will be a few big categories (transfers, ATM, salary),
-   so nearest neighbours lean toward them. It needs a vote with a minimum agreement and a
-   similarity floor, not just "closest wins".
-4. **Few labels at the start.** With only a handful of corrected stems there is little to be
-   near. Usefulness grows with your own corrections.
-5. **It must stay a suggestion.** Like the chat model's low-confidence tier, it goes to Review as
-   a hint, never applied automatically.
+`GET /api/transactions/{id}/flags`, `POST /api/transactions/{id}/explain` (409 when nothing is
+flagged).
 
-**What it would cost**
+## Re-analysis for the current model: 4.6 and 4.7
 
-- One more local model: `nomic-embed-text` (about 270 MB), `all-minilm` (about 45 MB, weaker), or
-  `mxbai-embed-large` (about 670 MB). One extra `ollama pull` while online, offline afterwards.
-  The Ollama container has a 5 GB limit; an embedding model fits beside the 3B chat model.
-- Storage: a vector per **distinct stem** (not per transaction): 768 numbers, about 3 KB. Five
-  thousand stems is about 15 MB. A table `stem_embeddings(stem, model, digest, vector)` is
-  enough; **no pgvector and no change to the Postgres image**. Nearest-neighbour search over a few
-  thousand vectors is instant with `numpy` (one new dependency).
-- Re-embed when the model's digest changes. Embeddings of stems only, so the same privacy as the
-  categoriser.
-- Roughly: a service to embed and search, a job to keep embeddings current, a new "similar to
-  what you chose" hint in Review, and an evaluation tool. About the size of the AI categoriser
-  itself.
+**What changed since the first look.** The first assessment was made on `qwen2.5:3b` (32 of 41
+right, 36 answered). The model now is `qwen3:4b` with thinking off: **37 of 41 right, 41 of 41
+answered, 0 unusable replies in 9 calls**, about 27 s per call of five one-line descriptions on this
+CPU. Closed-list labelling and JSON discipline are good. Anything that needs long input, long output
+or open reasoning is still slow and weak, and its confidence number still means nothing.
 
-**Recommendation: measure first, then decide.** Build only the evaluation (no UI, no schema
-beyond a temporary table): a tool in the style of `eval_categorizer` that embeds your categorised
-stems and reports **leave-one-out accuracy** (hide one label, predict it from the rest) by
-similarity threshold and vote size, printing only aggregates so the output is safe to share. Ship
-the feature only if, on your own data, the confident subset is right about 90% of the time **and**
-it categorises a meaningful share (say 15% or more) of what the rules leave open. If not, drop it
-and put the effort into more rules from your corrections. Order of value if it passes: (1) a
-suggestion tier in Review, (2) nearest examples in the chat model's prompt. Wait until you have
-corrected a couple of hundred stems; before that there is nothing to be near.
+### 4.6 Parsing unknown statement layouts with the model: viable, but not the way first imagined
+
+Three designs, in the order I would try them:
+
+| Design | Verdict with the current model |
+|---|---|
+| **C. A generic code adapter** (no model): a row is a line that starts with a date and ends with one or two money amounts, then the same balance reconciliation. | Try first. Free, instant, deterministic, private. The four supported banks share this shape, so it may already cover many others. |
+| **B. The model proposes a "layout recipe" once per layout** from a **redacted** sample (digits masked, names removed): date format, which column is which, how debit and credit are marked, where the opening and closing lines are, and the lines that identify the bank. Code then parses every page like a normal adapter and reconciles; the recipe is saved and reused each month. | Worth building when a real unsupported statement exists. It is one short call with a closed schema (the kind this model does well), it sends no real amounts, and a wrong recipe is harmless: the statement fails to reconcile and waits for review, as today. |
+| **A. The model reads every page and returns every row.** | Not as an everyday path. A page is about 40 rows of output, which on this CPU is likely minutes per page and tens of minutes per statement (an estimate from the 27 s per small call; I would measure one page before believing it). It also sends the whole statement (names, account numbers, amounts) to the model: still local, still not logged, but a break from "only stems are sent", so it needs your explicit yes. |
+
+Why the safety net is unusually strong: every statement must reconcile (opening plus credits minus
+debits equals closing, and every row's balance follows from the one before). A model that omits,
+swaps or garbles a row almost always breaks that arithmetic. Add a verbatim check (each date, amount
+and description fragment it returns must occur in the page text) and it can only copy, not invent.
+What arithmetic does not check: a wrong but real date, or a description attached to the wrong row.
+
+Scanned PDFs are a separate problem. `qwen3.5` models accept images, but a 4B vision model reading
+dense numeric tables is likely to misread digits; reconciliation would catch that, at a cost in time
+and review. Ordinary OCR (Tesseract) plus design C or B is the sounder route. Not tested.
+
+**Recommendation:** keep 4.6 open and start only when you have a statement from a bank we do not
+support: build C, measure how far it gets, then add B for what is left. Nothing to build without a
+real layout to test against.
+
+### 4.7 Free-form chat over the data: still no; a smaller thing instead
+
+The better model does not change the problem. A chat that answers "how much did I spend on fuel in
+March?" must get the number from code, so every answer is two model calls (choose a function, then
+phrase the result), at 10 to 30 s each on this CPU. Follow-ups ("and in April?") need conversation
+history, which is longer prompts, slower turns, more wrong guesses about what "and" refers to, and a
+conversation log that the privacy rule says we do not keep. The worst failure of a finance chat, a
+plausible wrong figure, is exactly the one that cannot be fully guarded.
+
+What is worth having is most of the value at a fraction of the risk: **answer one standalone
+question with a computed number** (new tracker item 4.8). It extends the search box: the same code
+that reads dates, amounts, banks and categories also recognises "how much / how many / average /
+biggest / compare", picks one of a few fixed functions (sum, count, average, largest, compare two
+months, top categories), and shows the answer with its interpretation spelled out ("Total spent on
+Fuel in March 2026, 12 transactions") and a link to the rows behind it. The model is barely needed:
+keyword rules cover the function choice, and the model only labels what code cannot (as now). No
+history, no free text from the model in the answer. I would build a 40-question synthetic test set
+first, in the style of the categoriser evaluation.
+
+**Recommendation:** leave 4.7 dropped; build 4.8 when you want it.

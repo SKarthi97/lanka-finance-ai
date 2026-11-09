@@ -2,12 +2,15 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import get_current_session
 from app.models import UserSession
-from app.services import ai_activity
+from app.config import Settings, get_settings
+from app.models import StemEmbedding
+from app.services import ai_activity, embeddings
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
@@ -64,4 +67,33 @@ def activity(
             RunOut(at=r.at, purpose=r.purpose, model=r.model, duration_ms=r.duration_ms, ok=r.valid_json)
             for r in ai_activity.recent(db)
         ],
+    )
+
+
+class SimilarityOut(BaseModel):
+    enabled: bool  # EMBED_SUGGEST_ENABLED
+    model: str
+    labelled: int  # descriptions you categorised yourself
+    needed: int  # the fewest labels before hints are offered
+    embedded: int  # vectors cached for this model
+
+
+@router.get("/similarity", response_model=SimilarityOut)
+def similarity(
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> SimilarityOut:
+    """State of the "like ones you chose" hints (off until you have measured them)."""
+    embedded = db.scalar(
+        select(func.count())
+        .select_from(StemEmbedding)
+        .where(StemEmbedding.user_id == session.user_id, StemEmbedding.model == settings.ollama_embed_model)
+    )
+    return SimilarityOut(
+        enabled=settings.embed_enabled,
+        model=settings.ollama_embed_model,
+        labelled=len(embeddings.labelled_stems(db, session.user_id)),
+        needed=settings.embed_min_labelled,
+        embedded=embedded or 0,
     )

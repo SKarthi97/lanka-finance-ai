@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     Text,
@@ -433,6 +434,31 @@ class MerchantName(Base):
     stem: Mapped[str] = mapped_column(String(200))
     name: Mapped[str] = mapped_column(String(64))
     source: Mapped[str] = mapped_column(String(16))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+
+
+class StemEmbedding(Base):
+    """A description stem turned into a vector by the local embedding model.
+
+    Keyed by (user, stem, model), so a different embedding model never reuses old vectors.
+    `vector` is float32 bytes of a unit-length vector. Only the stem is embedded: never amounts,
+    dates, accounts or filenames.
+    """
+
+    __tablename__ = "stem_embeddings"
+    __table_args__ = (
+        UniqueConstraint("user_id", "stem", "model", name="uq_stem_embeddings"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    stem: Mapped[str] = mapped_column(String(200))
+    model: Mapped[str] = mapped_column(String(64))
+    vector: Mapped[bytes] = mapped_column(LargeBinary)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow
     )

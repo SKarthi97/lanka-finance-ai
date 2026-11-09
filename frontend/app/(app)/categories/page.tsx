@@ -12,6 +12,7 @@ import {
   RuleItem,
   ReviewQueue,
   SuggestionGroup,
+  Similarity,
   Suggestions,
   TransferSuggestions,
 } from "@/lib/api";
@@ -60,12 +61,14 @@ export default function CategoriesPage() {
   const [status, setStatus] = useState<CategorizationStatus | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestions | null>(null);
   const [transferPairs, setTransferPairs] = useState<TransferSuggestions | null>(null);
+  const [similarity, setSimilarity] = useState<Similarity | null>(null);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
       setLoadError(null);
+      api<Similarity>("/ai/similarity").then(setSimilarity).catch(() => undefined);
       const [c, r, q, s, sg, tr] = await Promise.all([
         api<CategoryItem[]>("/categories"),
         api<RuleItem[]>("/rules"),
@@ -156,7 +159,7 @@ export default function CategoriesPage() {
 
       {!loadError && !queue && <RowsSkeleton />}
       {queue && tab === "review" && (
-        <ReviewTab queue={queue} status={status} categories={categories} run={run} />
+        <ReviewTab queue={queue} status={status} similarity={similarity} categories={categories} run={run} />
       )}
       {queue && tab === "suggestions" && (
         <SuggestionsTab suggestions={suggestions} categories={categories} run={run} />
@@ -175,11 +178,13 @@ type Run = (action: () => Promise<string | void>) => Promise<void>;
 function ReviewTab({
   queue,
   status,
+  similarity,
   categories,
   run,
 }: {
   queue: ReviewQueue;
   status: CategorizationStatus | null;
+  similarity: Similarity | null;
   categories: CategoryItem[];
   run: Run;
 }) {
@@ -210,6 +215,15 @@ function ReviewTab({
             Runs on your machine through Ollama; only the description text is used. Suggestions
             below 80% confidence are left for you.
           </span>
+          {similarity && (
+            <span className="w-full text-xs text-slate-500">
+              {similarity.enabled
+                ? similarity.labelled >= similarity.needed
+                  ? `Hints from descriptions you chose before are on (${similarity.labelled} of yours to compare with).`
+                  : `Hints from descriptions you chose before need ${similarity.needed} categorised by you; you have ${similarity.labelled}.`
+                : "Hints from descriptions you chose before are off. Turn them on after measuring them (docs/08)."}
+            </span>
+          )}
           {status.ai_pending && (
             <AiBusy
               label="The local AI is suggesting categories"
@@ -250,10 +264,10 @@ function ReviewTab({
                     {g.hint_category_id !== null && !choice[g.stem] && (
                       <button
                         onClick={() => setChoice({ ...choice, [g.stem]: String(g.hint_category_id) })}
-                        title="The AI was not confident enough to apply this, so it only suggests it"
+                        title={g.hint_reason ?? "The AI was not confident enough to apply this, so it only suggests it"}
                         className="mt-1 rounded bg-violet-100 px-2 py-0.5 text-xs text-violet-800 hover:opacity-90"
                       >
-                        AI hunch: {g.hint_category_name}
+                        {g.hint_reason?.startsWith("Similar") ? "Like ones you chose" : "AI hunch"}: {g.hint_category_name}
                         {g.hint_confidence !== null && ` (${Math.round(g.hint_confidence * 100)}%)`} · use it
                       </button>
                     )}

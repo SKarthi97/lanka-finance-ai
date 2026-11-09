@@ -9,6 +9,9 @@ const PURPOSE: Record<string, string> = {
   categorize: "Categorising",
   merchant: "Merchant names",
   search: "Search in plain words",
+  embed: "Similarity vectors",
+  summary: "Month summary",
+  explain: "Flag explanations",
 };
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {

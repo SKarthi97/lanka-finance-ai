@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { LoadError, RowsSkeleton } from "@/components/states";
-import { api, Budgets, Dashboard } from "@/lib/api";
-import { MONTHS_LONG, formatDate, formatMoney } from "@/lib/format";
+import { AiBusy } from "@/components/AiBusy";
+import { api, Budgets, Dashboard, MonthSummary } from "@/lib/api";
+import { MONTHS_LONG, formatDate, formatMoney, formatMs } from "@/lib/format";
 
 const select = "rounded border border-slate-300 bg-surface px-2 py-1.5 text-sm";
 const th = "px-3 py-1.5 font-medium";
@@ -18,6 +19,8 @@ export default function ReportsPage() {
   const [budgets, setBudgets] = useState<Budgets | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [summary, setSummary] = useState<MonthSummary | null>(null);
+  const [writing, setWriting] = useState(false);
 
   useEffect(() => {
     setFailed(false);
@@ -32,6 +35,25 @@ export default function ReportsPage() {
       })
       .catch(() => setFailed(true));
   }, [year, month, attempt]);
+
+  // The plain summary (written by code, with the real figures) loads with the month.
+  useEffect(() => {
+    setSummary(null);
+    api<MonthSummary>("/summary", { method: "POST", json: { year, month, ai: false } })
+      .then(setSummary)
+      .catch(() => setSummary(null));
+  }, [year, month, attempt]);
+
+  async function addParagraph() {
+    setWriting(true);
+    try {
+      setSummary(await api<MonthSummary>("/summary", { method: "POST", json: { year, month, ai: true } }));
+    } catch {
+      /* the plain summary stays */
+    } finally {
+      setWriting(false);
+    }
+  }
 
   const years = Array.from(new Set([...(dash?.years ?? []), now.getFullYear(), year])).sort((a, b) => a - b);
   const title = `${MONTHS_LONG[month - 1]} ${year}`;
@@ -88,6 +110,38 @@ export default function ReportsPage() {
               between your own accounts and repeated rows are left out
             </p>
           </header>
+
+          {summary && summary.bullets.length > 0 && totals.transactions > 0 && (
+            <section aria-label="In words" className="rounded border border-slate-200 bg-surface p-4">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-medium">The month in words</h3>
+                {!summary.narrative && (
+                  <button
+                    type="button"
+                    onClick={addParagraph}
+                    disabled={writing}
+                    title="The local AI writes a short paragraph from percentages and category names only; amounts are never sent to it."
+                    className="rounded border border-slate-300 px-3 py-1 text-xs hover:bg-slate-100 disabled:opacity-60 print:hidden"
+                  >
+                    ✨ Add a friendly paragraph
+                  </button>
+                )}
+              </div>
+              {summary.narrative && <p className="mb-3 text-sm">{summary.narrative}</p>}
+              <ul className="list-disc space-y-1 pl-5 text-sm">
+                {summary.bullets.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+              {writing && <div className="mt-3 print:hidden"><AiBusy compact label="The local AI is writing a paragraph" /></div>}
+              {summary.narrative && summary.model_ms !== null && (
+                <p className="mt-2 text-xs text-slate-500 print:hidden">
+                  Paragraph by the local AI in {formatMs(summary.model_ms)}. The figures above are written by the app itself.
+                </p>
+              )}
+              {summary.ai_note && <p className="mt-2 text-xs text-amber-700 print:hidden">{summary.ai_note}</p>}
+            </section>
+          )}
 
           {totals.transactions === 0 ? (
             <p className="rounded border border-slate-200 bg-surface px-4 py-3 text-sm text-slate-600">

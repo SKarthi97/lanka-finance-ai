@@ -334,6 +334,7 @@ class ReviewGroup(BaseModel):
     hint_category_id: int | None = None
     hint_category_name: str | None = None
     hint_confidence: float | None = None
+    hint_reason: str | None = None  # for example "Similar to 4 descriptions you categorised"
 
 
 class ReviewOut(BaseModel):

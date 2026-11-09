@@ -429,16 +429,17 @@ def review_groups(db: Session, user_id: int, limit: int = 100) -> tuple[list[dic
     Duplicates (the same transaction in an overlapping statement) are left out.
     """
     groups: dict[str, dict] = defaultdict(
-        lambda: {"count": 0, "example": None, "hints": Counter(), "confidence": {}}
+        lambda: {"count": 0, "example": None, "hints": Counter(), "confidence": {}, "reason": None}
     )
     total = 0
-    for _id, description, suggested, source, confidence in db.execute(
+    for _id, description, suggested, source, confidence, explanation in db.execute(
         select(
             Transaction.id,
             Transaction.original_description,
             Transaction.suggested_category_id,
             Transaction.classification_source,
             Transaction.classification_confidence,
+            Transaction.classification_explanation,
         ).where(
             Transaction.user_id == user_id,
             Transaction.is_duplicate.is_(False),
@@ -456,6 +457,7 @@ def review_groups(db: Session, user_id: int, limit: int = 100) -> tuple[list[dic
         if source == "llm_unsure" and suggested is not None:
             group["hints"][suggested] += 1
             group["confidence"][suggested] = confidence
+            group["reason"] = explanation
         total += 1
 
     names = {c.id: c.name for c in db.scalars(select(Category).where(Category.user_id == user_id))}
@@ -471,6 +473,7 @@ def review_groups(db: Session, user_id: int, limit: int = 100) -> tuple[list[dic
                 "hint_category_id": hint_id if hint_id in names else None,
                 "hint_category_name": names.get(hint_id) if hint_id is not None else None,
                 "hint_confidence": g["confidence"].get(hint_id) if hint_id is not None else None,
+                "hint_reason": g["reason"] if hint_id is not None else None,
             }
         )
     return result, total

@@ -56,6 +56,16 @@ class Settings(BaseSettings):
     # (small/medium/large). Off by default: with it off only description text is sent.
     llm_amount_hints: bool = False
 
+    # Similarity hints (docs/08, 4.3): suggest a category from descriptions you already
+    # categorised, using a small local embedding model. OFF until you have measured it on your own
+    # data: pull the model, run `python -m app.tools.eval_embeddings`, then set EMBED_SUGGEST_ENABLED.
+    embed_enabled: bool = False
+    ollama_embed_model: str = "nomic-embed-text"
+    embed_k: int = 5  # nearest labelled descriptions consulted
+    embed_min_similarity: float = 0.80  # neighbours less similar than this are ignored
+    embed_min_agree: float = 0.80  # share of the neighbours that must agree
+    embed_min_labelled: int = 20  # fewer corrected descriptions than this: do not suggest
+
     # Job queue / worker.
     job_poll_s: float = 2.0
     job_timeout_s: float = 120.0

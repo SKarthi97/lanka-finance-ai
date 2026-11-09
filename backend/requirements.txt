@@ -12,3 +12,5 @@ psutil>=5.9,<8
 # Stay on 1.x: 2.0 pulls in onnxruntime (which logs telemetry setup), pymupdf-layout
 # and pymupdf4llm. None are needed here and the app must stay telemetry-free.
 pymupdf>=1.26,<2
+# Similarity search over description embeddings (a few thousand vectors).
+numpy>=1.26,<3

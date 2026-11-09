@@ -283,8 +283,39 @@ def classify_uncategorised(
         groups[rep].append(stem)
 
     stems = sorted(groups, key=lambda s: -sum(len(by_stem[m]) for m in groups[s]))[:MAX_STEMS_PER_JOB]
+
+    # Similarity tier (off unless EMBED_SUGGEST_ENABLED): a fast hint from descriptions you
+    # already categorised. Those stems skip the slow model; the rest go on to it.
+    similar_count = 0
+    if settings.embed_enabled and stems:
+        from app.services import embeddings  # late: embeddings imports this module
+
+        try:
+            similar = embeddings.suggest(db, settings, user_id, stems, transport)
+        except LlmUnavailable as error:
+            log.info("similarity hints skipped: %s", error)
+            similar = {}
+        for stem, hint in similar.items():
+            row_ids = [row_id for member in groups[stem] for row_id in by_stem[member]]
+            db.execute(
+                update(Transaction)
+                .where(Transaction.id.in_(row_ids))
+                .values(
+                    category_id=None,
+                    classification_source="llm_unsure",
+                    suggested_category_id=hint.category_id,
+                    classification_confidence=hint.confidence,
+                    classification_explanation=f"Similar to {hint.neighbours} descriptions you categorised"[:200],
+                )
+            )
+            similar_count += len(row_ids)
+        stems = [s for s in stems if s not in similar]
+
     if not stems:
-        return {"stems": 0, "applied": 0, "unsure": 0, "hinted": 0}
+        counts = {"stems": 0, "applied": 0, "unsure": 0, "hinted": 0}
+        if settings.embed_enabled:
+            counts["similar"] = similar_count
+        return counts
 
     examples = learned_examples(db, user_id, stems, categories, settings.llm_example_limit)
     hints = None
@@ -331,7 +362,10 @@ def classify_uncategorised(
             )
             unsure += len(row_ids)
             hinted += len(row_ids) if hint else 0
-    return {"stems": len(stems), "applied": applied, "unsure": unsure, "hinted": hinted}
+    counts = {"stems": len(stems), "applied": applied, "unsure": unsure, "hinted": hinted}
+    if settings.embed_enabled:
+        counts["similar"] = similar_count
+    return counts
 
 
 # --- job plumbing ---------------------------------------------------------------------------------
@@ -361,10 +395,11 @@ def run_classify_job(db: Session, job: Job, settings: Settings) -> None:
     counts = classify_uncategorised(db, settings, user_id)
     db.commit()
     log.info(
-        "ai classification user %s: stems=%s applied=%s unsure=%s hinted=%s",
+        "ai classification user %s: stems=%s applied=%s unsure=%s hinted=%s similar=%s",
         user_id,
         counts["stems"],
         counts["applied"],
         counts["unsure"],
         counts["hinted"],
+        counts.get("similar", 0),
     )

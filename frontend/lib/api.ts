@@ -325,6 +325,7 @@ export type ReviewQueue = {
     hint_category_id: number | null; // a low-confidence AI guess, never applied on its own
     hint_category_name: string | null;
     hint_confidence: number | null;
+    hint_reason: string | null; // e.g. "Similar to 3 descriptions you categorised"
   }[];
 };
 
@@ -437,3 +438,29 @@ export type SearchReading = {
 };
 
 export type SavedViewItem = { id: number; name: string; filters: ViewFilters };
+
+// --- summary, flags, similarity ----------------------------------------------------------------
+
+export type MonthSummary = {
+  label: string;
+  bullets: string[];
+  narrative: string | null;
+  used_ai: boolean;
+  ai_note: string | null;
+  took_ms: number;
+  model_ms: number | null;
+};
+
+export type TxFlag = { code: string; title: string };
+
+export type FlagExplanation = {
+  flags: TxFlag[];
+  explanation: string | null;
+  check: string | null;
+  used_ai: boolean;
+  ai_note: string | null;
+  took_ms: number;
+  model_ms: number | null;
+};
+
+export type Similarity = { enabled: boolean; model: string; labelled: number; needed: number; embedded: number };
