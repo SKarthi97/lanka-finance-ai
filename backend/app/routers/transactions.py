@@ -51,6 +51,8 @@ class TransactionOut(BaseModel):
 
 class TransactionList(BaseModel):
     total: int
+    money_in: Decimal  # credits and debits over every row the filter matches, not just this page
+    money_out: Decimal
     items: list[TransactionOut]
 
 
@@ -192,6 +194,14 @@ def list_transactions(
         )
         or 0
     )
+    money_in, money_out = db.execute(
+        select(
+            func.coalesce(func.sum(Transaction.credit), 0), func.coalesce(func.sum(Transaction.debit), 0)
+        )
+        .select_from(Transaction)
+        .outerjoin(Bank, Transaction.bank_id == Bank.id)
+        .where(*conditions)
+    ).one()
     rows = db.execute(
         _query(conditions).order_by(*_ordering(sort, order)).limit(limit).offset(offset)
     ).all()
@@ -199,6 +209,8 @@ def list_transactions(
     named = merchants.names_for(db, session.user_id, [r[0].original_description for r in rows])
     return TransactionList(
         total=total,
+        money_in=Decimal(money_in),
+        money_out=Decimal(money_out),
         items=[
             TransactionOut(
                 id=t.id,

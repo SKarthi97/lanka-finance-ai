@@ -90,7 +90,7 @@ function SortHeader({
   const active = sort === column;
   return (
     <th
-      className={`px-3 py-2 font-medium ${align === "right" ? "text-right" : ""} ${className}`}
+      className={`sticky top-0 z-10 bg-surface px-3 py-2 font-medium ${align === "right" ? "text-right" : ""} ${className}`}
       aria-sort={active ? (order === "asc" ? "ascending" : "descending") : "none"}
     >
       <button
@@ -99,7 +99,7 @@ function SortHeader({
         className={`inline-flex items-center gap-1 hover:text-slate-900 ${active ? "text-slate-900" : ""}`}
       >
         {label}
-        <span aria-hidden="true" className={active ? "" : "text-slate-400"}>
+        <span aria-hidden="true" className={active ? "text-accent" : "text-slate-400"}>
           {active ? (order === "asc" ? "▲" : "▼") : "↕"}
         </span>
       </button>
@@ -702,14 +702,34 @@ export default function TransactionsPage() {
         </div>
       </div>
 
+      {data && data.items.length > 0 && (
+        <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm tabular-nums" aria-label="Totals for this filter">
+          <span className="text-slate-500">
+            In <span className="font-medium text-green-700">+ {formatMoney(data.money_in)}</span>
+          </span>
+          <span className="text-slate-500">
+            Out <span className="font-medium text-red-700">− {formatMoney(data.money_out)}</span>
+          </span>
+          <span className="text-slate-500">
+            Net{" "}
+            <span
+              className={`font-medium ${Number(data.money_in) - Number(data.money_out) < 0 ? "text-red-700" : "text-green-700"}`}
+            >
+              {formatMoney(String(Number(data.money_in) - Number(data.money_out)))}
+            </span>
+          </span>
+          <span className="text-xs text-slate-400">all {total} matching rows, transfers included</span>
+        </div>
+      )}
+
       {data && data.items.length === 0 ? (
         <p className="text-sm text-slate-500">No transactions found.</p>
       ) : (
-        <div className={`overflow-x-auto rounded border border-slate-200 bg-surface ${data ? "" : "hidden"}`}>
+        <div className={`max-h-[calc(100vh-11rem)] overflow-auto rounded border border-slate-200 bg-surface ${data ? "" : "hidden"}`}>
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-200 text-slate-600">
               <tr>
-                <th className="w-8 px-3 py-2">
+                <th className="sticky top-0 z-10 w-8 bg-surface px-3 py-2">
                   <input
                     type="checkbox"
                     aria-label="Select every transaction on this page"
@@ -723,8 +743,8 @@ export default function TransactionsPage() {
                 <SortHeader label="Category" column="category" sort={sort} order={order} onSort={sortBy} />
                 <SortHeader label="Debit" column="amount" sort={sort} order={order} onSort={sortBy} align="right" className="min-w-[8.5rem]" />
                 <SortHeader label="Credit" column="amount" sort={sort} order={order} onSort={sortBy} align="right" className="min-w-[8.5rem]" />
-                <th className="hidden min-w-[9.5rem] px-3 py-2 text-right font-medium lg:table-cell">Balance</th>
-                <th className="hidden px-3 py-2 font-medium lg:table-cell">Statement</th>
+                <th className="sticky top-0 z-10 hidden min-w-[9.5rem] bg-surface px-3 py-2 text-right font-medium lg:table-cell">Balance</th>
+                <th className="sticky top-0 z-10 hidden bg-surface px-3 py-2 font-medium lg:table-cell">Statement</th>
               </tr>
             </thead>
             <tbody>
@@ -742,7 +762,7 @@ export default function TransactionsPage() {
                 )}
                 <tr
                   className={`border-b border-slate-100 last:border-0 hover:bg-slate-50 ${
-                    t.validation_status !== "ok" ? "bg-amber-50" : ""
+                    t.validation_status !== "ok" ? "bg-amber-50" : selected.has(t.id) ? "" : "even:bg-white/[0.02]"
                   } ${t.is_duplicate ? "text-slate-400" : ""} ${selected.has(t.id) ? "bg-accent/10" : ""}`}
                 >
                   <td
@@ -837,14 +857,14 @@ export default function TransactionsPage() {
                   <td className={`whitespace-nowrap px-3 py-2 text-right font-medium tabular-nums ${t.is_duplicate ? "" : "text-green-700"}`}>
                     {Number(t.credit) === 0 ? "" : `+ ${formatAmount(t.credit)}`}
                   </td>
-                  <td className="hidden whitespace-nowrap px-3 py-2 text-right tabular-nums lg:table-cell">
+                  <td className="hidden whitespace-nowrap px-3 py-2 text-right tabular-nums text-slate-400 lg:table-cell">
                     {formatMoney(t.running_balance)}
                   </td>
                   <td className="hidden whitespace-nowrap px-3 py-2 lg:table-cell">
-                    <Link href={`/documents/${t.document_id}`} className="underline">
+                    <Link href={`/documents/${t.document_id}`} className="text-xs text-slate-500 underline hover:text-slate-900">
                       #{t.document_id}
                     </Link>{" "}
-                    <span className="text-xs text-slate-500">p{t.source_page}</span>
+                    <span className="text-xs text-slate-400">p{t.source_page}</span>
                   </td>
                 </tr>
                 </Fragment>

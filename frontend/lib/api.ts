@@ -170,7 +170,7 @@ export type TransactionItem = {
   classification_explanation: string | null;
 };
 
-export type TransactionList = { total: number; items: TransactionItem[] };
+export type TransactionList = { total: number; money_in: string; money_out: string; items: TransactionItem[] };
 
 export type Bank = { code: string; name: string };
 
