@@ -209,9 +209,17 @@ def rule_matches(rule: Rule, normalised: str) -> bool:
 
 def pick_rule(rules: list[Rule], normalised: str) -> Rule | None:
     """`rules` must be sorted strongest first (see load_rules)."""
+    stem = None
     for rule in rules:
         if rule_matches(rule, normalised):
             return rule
+        if rule.origin == "correction":
+            # A correction is saved under the stem, which skips number words: the stem "CRDLESDEP AECT"
+            # is not a substring of "CRDLESDEP 0000769618638 AECT", yet it is the same description.
+            if stem is None:
+                stem = description_stem(normalised)
+            if stem == rule.pattern:
+                return rule
     return None
 
 
@@ -415,7 +423,8 @@ def count_similar(db: Session, user_id: int, stem: str, exclude_id: int | None =
             Transaction.id, Transaction.original_description, Transaction.classification_source
         ).where(Transaction.user_id == user_id)
     ):
-        if row_id != exclude_id and source != "manual" and needle in normalise(description):
+        text = normalise(description)
+        if row_id != exclude_id and source != "manual" and (needle in text or description_stem(text) == needle):
             count += 1
     return count
 

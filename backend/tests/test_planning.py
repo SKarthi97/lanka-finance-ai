@@ -307,3 +307,11 @@ def test_an_empty_month_still_produces_a_report(logged_in):
 
 def test_the_report_needs_a_session(client):
     assert client.get("/api/reports/monthly.csv").status_code == 401
+
+
+def test_a_correction_matches_a_description_with_a_number_between_the_words():
+    from app.services.categorizer import Rule, pick_rule
+
+    rule = Rule(1, "CRDLESDEP AECT", "contains", 7, "correction", 100)
+    assert pick_rule([rule], "CRDLESDEP 0000769618638 AECT") is rule
+    assert pick_rule([rule], "SOMETHING ELSE") is None
