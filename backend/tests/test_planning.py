@@ -315,3 +315,10 @@ def test_a_correction_matches_a_description_with_a_number_between_the_words():
     rule = Rule(1, "CRDLESDEP AECT", "contains", 7, "correction", 100)
     assert pick_rule([rule], "CRDLESDEP 0000769618638 AECT") is rule
     assert pick_rule([rule], "SOMETHING ELSE") is None
+
+
+def test_dividend_is_an_income_category_with_rules():
+    from app.services.categorizer import CATEGORIES, RULES
+
+    assert ("Dividend", "income") in CATEGORIES
+    assert any(cat == "Dividend" for _p, _t, cat, _pr in RULES)

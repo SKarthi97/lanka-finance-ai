@@ -29,7 +29,7 @@ from app.models import (
     Transaction,
 )
 
-SYSTEM_VERSION = 1  # bump when CATEGORIES / RULES below gain entries
+SYSTEM_VERSION = 2  # bump when CATEGORIES / RULES below gain entries
 
 KINDS = ("income", "expense", "transfer")
 
@@ -38,6 +38,7 @@ KINDS = ("income", "expense", "transfer")
 CATEGORIES: list[tuple[str, str]] = [
     ("Salary", "income"),
     ("Interest income", "income"),
+    ("Dividend", "income"),
     ("Deposits", "income"),
     ("Other income", "income"),
     ("Transfers", "transfer"),
@@ -98,6 +99,8 @@ RULES: list[tuple[str, str, str, int]] = [
     ("INTEREST PAY", "contains", "Interest income", 10),
     ("INTEREST CREDIT", "contains", "Interest income", 10),
     ("INT PAID", "contains", "Interest income", 10),
+    ("DIVIDEND", "contains", "Dividend", 20),
+    ("DIV PAID", "contains", "Dividend", 20),
     ("SLIPS IN", "contains", "Deposits", 10),
     ("CASH DEPOSIT", "contains", "Deposits", 10),
     ("CHEQUE DEPOSIT", "contains", "Deposits", 10),
