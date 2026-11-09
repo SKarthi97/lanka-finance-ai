@@ -698,9 +698,9 @@ export default function TransactionsPage() {
                 <SortHeader label="Bank" column="bank" sort={sort} order={order} onSort={sortBy} className="hidden md:table-cell" />
                 <SortHeader label="Description" column="description" sort={sort} order={order} onSort={sortBy} />
                 <SortHeader label="Category" column="category" sort={sort} order={order} onSort={sortBy} />
-                <SortHeader label="Debit" column="amount" sort={sort} order={order} onSort={sortBy} align="right" />
-                <SortHeader label="Credit" column="amount" sort={sort} order={order} onSort={sortBy} align="right" />
-                <th className="hidden px-3 py-2 text-right font-medium lg:table-cell">Balance</th>
+                <SortHeader label="Debit" column="amount" sort={sort} order={order} onSort={sortBy} align="right" className="min-w-[8.5rem]" />
+                <SortHeader label="Credit" column="amount" sort={sort} order={order} onSort={sortBy} align="right" className="min-w-[8.5rem]" />
+                <th className="hidden min-w-[9.5rem] px-3 py-2 text-right font-medium lg:table-cell">Balance</th>
                 <th className="hidden px-3 py-2 font-medium lg:table-cell">Statement</th>
               </tr>
             </thead>
@@ -796,13 +796,13 @@ export default function TransactionsPage() {
                       </span>
                     )}
                   </td>
-                  <td className={`px-3 py-2 text-right tabular-nums ${t.is_duplicate ? "" : "text-red-700"}`}>
+                  <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${t.is_duplicate ? "" : "text-red-700"}`}>
                     {Number(t.debit) === 0 ? "" : `− ${formatAmount(t.debit)}`}
                   </td>
-                  <td className={`px-3 py-2 text-right font-medium tabular-nums ${t.is_duplicate ? "" : "text-green-700"}`}>
+                  <td className={`whitespace-nowrap px-3 py-2 text-right font-medium tabular-nums ${t.is_duplicate ? "" : "text-green-700"}`}>
                     {Number(t.credit) === 0 ? "" : `+ ${formatAmount(t.credit)}`}
                   </td>
-                  <td className="hidden px-3 py-2 text-right tabular-nums lg:table-cell">
+                  <td className="hidden whitespace-nowrap px-3 py-2 text-right tabular-nums lg:table-cell">
                     {formatMoney(t.running_balance)}
                   </td>
                   <td className="hidden whitespace-nowrap px-3 py-2 lg:table-cell">

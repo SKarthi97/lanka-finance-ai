@@ -298,7 +298,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             rule-based categorization continue to work; AI features resume when the model is back.
           </div>
         )}
-        <main id="main" tabIndex={-1} className="mx-auto outline-none max-w-6xl px-4 py-6 sm:px-6">{children}</main>
+        <main id="main" tabIndex={-1} className={`mx-auto outline-none px-4 py-6 sm:px-6 ${
+          // the transactions table has many columns: give it the room the description column needs
+          pathname.startsWith("/transactions") ? "max-w-[96rem]" : "max-w-6xl"
+        }`}>{children}</main>
       </div>
     </div>
     </ConfirmProvider>
