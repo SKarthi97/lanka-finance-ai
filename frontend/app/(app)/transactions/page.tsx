@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { Pager } from "@/components/Pager";
 import { LoadError, RowsSkeleton } from "@/components/states";
@@ -45,6 +45,29 @@ function categoryTint(kind: "income" | "expense" | "transfer" | undefined): stri
   if (kind === "expense") return "border-slate-200 bg-surface";
   if (kind === "transfer") return "border-sky-400/40 bg-sky-400/10 text-sky-300";
   return "border-amber-400/50 bg-amber-50 text-amber-400"; // uncategorised: needs a look
+}
+
+// Each bank keeps one colour, so rows from different banks are told apart at a glance.
+const BANK_TINTS = [
+  "bg-sky-400/15 text-sky-300",
+  "bg-fuchsia-400/15 text-fuchsia-300",
+  "bg-emerald-400/15 text-emerald-300",
+  "bg-orange-400/15 text-orange-300",
+  "bg-violet-400/15 text-violet-300",
+  "bg-rose-400/15 text-rose-300",
+  "bg-teal-400/15 text-teal-300",
+  "bg-yellow-400/15 text-yellow-300",
+];
+
+function bankTint(code: string | null): string {
+  if (!code) return "bg-slate-100 text-slate-600";
+  let h = 0;
+  for (const ch of code.toUpperCase()) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return BANK_TINTS[h % BANK_TINTS.length];
+}
+
+function monthTitle(date: string): string {
+  return new Date(`${date.slice(0, 7)}-01T00:00:00`).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
 }
 
 function SortHeader({
@@ -705,9 +728,19 @@ export default function TransactionsPage() {
               </tr>
             </thead>
             <tbody>
-              {(data?.items ?? []).map((t) => (
+              {(data?.items ?? []).map((t, index, all) => (
+                <Fragment key={t.id}>
+                {sort === "date" && (index === 0 || all[index - 1].transaction_date.slice(0, 7) !== t.transaction_date.slice(0, 7)) && (
+                  <tr className="bg-slate-50">
+                    <td colSpan={9} className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                      {monthTitle(t.transaction_date)}
+                      <span className="ml-2 font-normal normal-case text-slate-500">
+                        {all.filter((x) => x.transaction_date.slice(0, 7) === t.transaction_date.slice(0, 7)).length} on this page
+                      </span>
+                    </td>
+                  </tr>
+                )}
                 <tr
-                  key={t.id}
                   className={`border-b border-slate-100 last:border-0 hover:bg-slate-50 ${
                     t.validation_status !== "ok" ? "bg-amber-50" : ""
                   } ${t.is_duplicate ? "text-slate-400" : ""} ${selected.has(t.id) ? "bg-accent/10" : ""}`}
@@ -731,7 +764,7 @@ export default function TransactionsPage() {
                   <td className="whitespace-nowrap px-3 py-2">{formatDate(t.transaction_date)}</td>
                   <td className="hidden whitespace-nowrap px-3 py-2 md:table-cell">
                     <span
-                      className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium uppercase"
+                      className={`rounded px-2 py-0.5 text-xs font-medium uppercase ${bankTint(t.bank_code)}`}
                       title={t.bank_name ?? undefined}
                     >
                       {t.bank_code ?? "?"}
@@ -748,12 +781,14 @@ export default function TransactionsPage() {
                     <button
                       onClick={() => setDetail(t)}
                       title="Show details"
-                      className="text-left hover:underline"
+                      className="text-left font-medium text-slate-900 hover:underline"
                     >
                       {t.merchant}
                     </button>
                     {t.merchant.toLowerCase() !== t.description.toLowerCase() && (
-                      <div className="break-words text-xs text-slate-500">{t.description}</div>
+                      <div className="max-w-[34rem] truncate text-xs text-slate-500" title={t.description}>
+                        {t.description}
+                      </div>
                     )}
                     {t.is_duplicate && (
                       <span
@@ -812,6 +847,7 @@ export default function TransactionsPage() {
                     <span className="text-xs text-slate-500">p{t.source_page}</span>
                   </td>
                 </tr>
+                </Fragment>
               ))}
             </tbody>
           </table>
