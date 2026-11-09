@@ -39,6 +39,14 @@ const select = "rounded border border-slate-300 px-2 py-2 text-sm bg-surface";
 type SortKey = "date" | "amount" | "description" | "bank" | "category";
 
 /** Column header that sorts; the arrow shows the active direction. */
+// A category's tint says at a glance whether it is money in, money out or moved between your accounts.
+function categoryTint(kind: "income" | "expense" | "transfer" | undefined): string {
+  if (kind === "income") return "border-green-700/50 bg-green-50 text-green-800";
+  if (kind === "expense") return "border-slate-200 bg-surface";
+  if (kind === "transfer") return "border-sky-400/40 bg-sky-400/10 text-sky-300";
+  return "border-amber-400/50 bg-amber-50 text-amber-400"; // uncategorised: needs a look
+}
+
 function SortHeader({
   label,
   column,
@@ -700,11 +708,19 @@ export default function TransactionsPage() {
               {(data?.items ?? []).map((t) => (
                 <tr
                   key={t.id}
-                  className={`border-b border-slate-100 last:border-0 ${
+                  className={`border-b border-slate-100 last:border-0 hover:bg-slate-50 ${
                     t.validation_status !== "ok" ? "bg-amber-50" : ""
                   } ${t.is_duplicate ? "text-slate-400" : ""} ${selected.has(t.id) ? "bg-accent/10" : ""}`}
                 >
-                  <td className="px-3 py-2">
+                  <td
+                    className={`border-l-2 px-3 py-2 ${
+                      t.validation_status !== "ok"
+                        ? "border-l-amber-400"
+                        : Number(t.credit) > 0
+                          ? "border-l-green-700"
+                          : "border-l-transparent"
+                    }`}
+                  >
                     <input
                       type="checkbox"
                       aria-label={`Select transaction ${t.id}`}
@@ -760,7 +776,9 @@ export default function TransactionsPage() {
                             }`
                           : "Not categorised"
                       }
-                      className="max-w-[10rem] rounded border border-slate-200 bg-surface px-1 py-0.5 text-xs"
+                      className={`max-w-[10rem] rounded border px-1 py-0.5 text-xs ${categoryTint(
+                        categories.find((c) => c.id === t.category_id)?.kind,
+                      )}`}
                     >
                       <option value="">Uncategorised</option>
                       {categories.map((c) => (
@@ -778,8 +796,12 @@ export default function TransactionsPage() {
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatAmount(t.debit)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatAmount(t.credit)}</td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${t.is_duplicate ? "" : "text-red-700"}`}>
+                    {Number(t.debit) === 0 ? "" : `− ${formatAmount(t.debit)}`}
+                  </td>
+                  <td className={`px-3 py-2 text-right font-medium tabular-nums ${t.is_duplicate ? "" : "text-green-700"}`}>
+                    {Number(t.credit) === 0 ? "" : `+ ${formatAmount(t.credit)}`}
+                  </td>
                   <td className="hidden px-3 py-2 text-right tabular-nums lg:table-cell">
                     {formatMoney(t.running_balance)}
                   </td>
