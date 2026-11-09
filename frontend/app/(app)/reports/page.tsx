@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { LoadError, RowsSkeleton } from "@/components/states";
 import { AiBusy } from "@/components/AiBusy";
 import { api, Budgets, Dashboard, MonthSummary } from "@/lib/api";
-import { MONTHS_LONG, formatDate, formatMoney, formatMs } from "@/lib/format";
+import { MONTHS_LONG, bankTint, formatDate, formatMoney, formatMs } from "@/lib/format";
 
 const select = "rounded border border-slate-300 bg-surface px-2 py-1.5 text-sm";
 const th = "px-3 py-1.5 font-medium";
@@ -55,6 +55,12 @@ export default function ReportsPage() {
     }
   }
 
+  function step(by: number) {
+    const moved = new Date(year, month - 1 + by, 1);
+    setYear(moved.getFullYear());
+    setMonth(moved.getMonth() + 1);
+  }
+
   const years = Array.from(new Set([...(dash?.years ?? []), now.getFullYear(), year])).sort((a, b) => a - b);
   const title = `${MONTHS_LONG[month - 1]} ${year}`;
   const totals = dash?.month;
@@ -66,7 +72,24 @@ export default function ReportsPage() {
   return (
     <section className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-        <h1 className="text-xl font-semibold">Monthly report</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-semibold">Monthly report</h1>
+          <div className="ml-2 flex items-center overflow-hidden rounded border border-slate-300 text-sm">
+            <button type="button" onClick={() => step(-1)} aria-label="Previous month" className="px-2.5 py-1.5 hover:bg-slate-100">
+              ‹
+            </button>
+            <span className="border-x border-slate-300 px-3 py-1.5 tabular-nums text-slate-900">{title}</span>
+            <button
+              type="button"
+              onClick={() => step(1)}
+              disabled={year === now.getFullYear() && month === now.getMonth() + 1}
+              aria-label="Next month"
+              className="px-2.5 py-1.5 hover:bg-slate-100 disabled:opacity-40"
+            >
+              ›
+            </button>
+          </div>
+        </div>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <select aria-label="Year" value={year} onChange={(e) => setYear(Number(e.target.value))} className={select}>
             {years.map((y) => (
@@ -150,18 +173,29 @@ export default function ReportsPage() {
           ) : (
             <>
               <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded border border-slate-200 bg-surface p-4">
+                <div className="rounded border border-slate-200 border-t-2 border-t-green-700 bg-surface p-4">
                   <div className="text-xs text-slate-500">Income</div>
-                  <div className="mt-1 text-xl font-semibold tabular-nums">{formatMoney(totals.income)}</div>
+                  <div className="mt-1 text-xl font-semibold tabular-nums text-green-700">{formatMoney(totals.income)}</div>
                 </div>
-                <div className="rounded border border-slate-200 bg-surface p-4">
+                <div className="rounded border border-slate-200 border-t-2 border-t-red-700 bg-surface p-4">
                   <div className="text-xs text-slate-500">Expense</div>
-                  <div className="mt-1 text-xl font-semibold tabular-nums">{formatMoney(totals.expense)}</div>
+                  <div className="mt-1 text-xl font-semibold tabular-nums text-red-700">{formatMoney(totals.expense)}</div>
                 </div>
-                <div className="rounded border border-slate-200 bg-surface p-4">
+                <div
+                  className={`rounded border border-slate-200 border-t-2 bg-surface p-4 ${
+                    Number(totals.net) < 0 ? "border-t-red-700" : "border-t-green-700"
+                  }`}
+                >
                   <div className="text-xs text-slate-500">Net</div>
-                  <div className="mt-1 text-xl font-semibold tabular-nums">{formatMoney(totals.net)}</div>
-                  <div className="mt-1 text-xs text-slate-500">{totals.transactions} transactions</div>
+                  <div
+                    className={`mt-1 text-xl font-semibold tabular-nums ${Number(totals.net) < 0 ? "text-red-700" : "text-green-700"}`}
+                  >
+                    {formatMoney(totals.net)}
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    {totals.transactions} transactions
+                    {Number(totals.income) > 0 && ` · ${Math.round((Number(totals.net) / Number(totals.income)) * 100)}% of income kept`}
+                  </div>
                 </div>
               </div>
 
@@ -193,10 +227,17 @@ export default function ReportsPage() {
                     <tbody>
                       {dash.month_by_bank.map((b) => (
                         <tr key={b.bank_code ?? "none"} className="border-b border-slate-100 last:border-0">
-                          <td className="px-3 py-1.5">{b.bank_name ?? "Unknown bank"}</td>
-                          <td className="px-3 py-1.5 text-right tabular-nums">{formatMoney(b.income)}</td>
-                          <td className="px-3 py-1.5 text-right tabular-nums">{formatMoney(b.expense)}</td>
-                          <td className="px-3 py-1.5 text-right tabular-nums">{formatMoney(b.net)}</td>
+                          <td className="px-3 py-1.5">
+                            <span className={`mr-2 rounded px-2 py-0.5 text-xs font-medium uppercase ${bankTint(b.bank_code)}`}>
+                              {b.bank_code ?? "?"}
+                            </span>
+                            {b.bank_name ?? "Unknown bank"}
+                          </td>
+                          <td className="px-3 py-1.5 text-right tabular-nums text-green-700">{formatMoney(b.income)}</td>
+                          <td className="px-3 py-1.5 text-right tabular-nums text-red-700">{formatMoney(b.expense)}</td>
+                          <td className={`px-3 py-1.5 text-right tabular-nums ${Number(b.net) < 0 ? "text-red-700" : ""}`}>
+                            {formatMoney(b.net)}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -218,15 +259,21 @@ export default function ReportsPage() {
                     <tbody>
                       {(() => {
                         const total = spending.reduce((n, c) => n + Number(c.expense), 0); // display only
-                        return spending.map((c) => (
-                          <tr key={c.category_id ?? "none"} className="border-b border-slate-100 last:border-0">
-                            <td className="px-3 py-1.5">{c.name}</td>
-                            <td className="px-3 py-1.5 text-right tabular-nums">{formatMoney(c.expense)}</td>
-                            <td className="px-3 py-1.5 text-right tabular-nums">
-                              {total > 0 ? Math.round((Number(c.expense) / total) * 100) : 0}%
-                            </td>
-                          </tr>
-                        ));
+                        return spending.map((c) => {
+                          const share = total > 0 ? (Number(c.expense) / total) * 100 : 0;
+                          return (
+                            <tr key={c.category_id ?? "none"} className="border-b border-slate-100 last:border-0">
+                              <td className="px-3 py-1.5">
+                                <div>{c.name}</div>
+                                <div className="mt-1 h-1.5 w-full max-w-xs overflow-hidden rounded bg-slate-200" aria-hidden="true">
+                                  <div className="h-full rounded bg-accent" style={{ width: `${Math.max(share, 1)}%` }} />
+                                </div>
+                              </td>
+                              <td className="px-3 py-1.5 text-right tabular-nums">{formatMoney(c.expense)}</td>
+                              <td className="px-3 py-1.5 text-right tabular-nums text-slate-500">{Math.round(share)}%</td>
+                            </tr>
+                          );
+                        });
                       })()}
                     </tbody>
                   </table>
@@ -254,7 +301,23 @@ export default function ReportsPage() {
                           <td className="px-3 py-1.5 text-right tabular-nums">{formatMoney(b.spent)}</td>
                           <td className="px-3 py-1.5 text-right tabular-nums">{formatMoney(b.remaining)}</td>
                           <td className="px-3 py-1.5">
-                            {b.state === "over" ? "Over" : b.state === "near" ? "Nearly used" : "On track"} ({b.percent}%)
+                            <div className="flex items-center gap-2">
+                              <div className="h-1.5 w-20 overflow-hidden rounded bg-slate-200" aria-hidden="true">
+                                <div
+                                  className={`h-full rounded ${
+                                    b.state === "over" ? "bg-red-700" : b.state === "near" ? "bg-amber-400" : "bg-green-700"
+                                  }`}
+                                  style={{ width: `${Math.min(100, b.percent)}%` }}
+                                />
+                              </div>
+                              <span
+                                className={
+                                  b.state === "over" ? "text-red-700" : b.state === "near" ? "text-amber-400" : "text-green-700"
+                                }
+                              >
+                                {b.state === "over" ? "Over" : b.state === "near" ? "Nearly used" : "On track"} ({b.percent}%)
+                              </span>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -267,13 +330,15 @@ export default function ReportsPage() {
                 <section>
                   <h3 className="mb-1 font-medium">Largest expenses</h3>
                   <ul className="divide-y divide-slate-100 rounded border border-slate-200 bg-surface text-sm">
-                    {dash.top_expenses.map((t) => (
+                    {dash.top_expenses.map((t, i) => (
                       <li key={t.id} className="flex items-baseline justify-between gap-3 px-3 py-1.5">
                         <span className="min-w-0 break-words">
-                          <span className="text-xs text-slate-500">{formatDate(t.transaction_date)}</span> {t.description}
+                          <span className="mr-2 text-xs text-slate-400">{i + 1}.</span>
+                          <span className="text-xs text-slate-500">{formatDate(t.transaction_date)}</span>{" "}
+                          <span className="font-medium text-slate-900">{t.description}</span>
                           <span className="text-xs text-slate-500"> · {t.category_name ?? "uncategorised"}</span>
                         </span>
-                        <span className="shrink-0 tabular-nums">{formatMoney(t.amount)}</span>
+                        <span className="shrink-0 tabular-nums text-red-700">{formatMoney(t.amount)}</span>
                       </li>
                     ))}
                   </ul>
