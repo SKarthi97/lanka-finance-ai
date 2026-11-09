@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { LoadError, RowsSkeleton } from "@/components/states";
 import { AiBusy } from "@/components/AiBusy";
+import { GrowthReport } from "@/components/GrowthReport";
 import { api, Budgets, Dashboard, MonthSummary } from "@/lib/api";
 import { MONTHS_LONG, bankTint, formatDate, formatMoney, formatMs } from "@/lib/format";
 
@@ -11,10 +12,51 @@ const th = "px-3 py-1.5 font-medium";
 
 export default function ReportsPage() {
   const now = new Date();
-  // Default to last month: the one you are most likely to want a finished summary of.
   const last = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const [year, setYear] = useState(last.getFullYear());
-  const [month, setMonth] = useState(last.getMonth() + 1);
+  const [tab, setTab] = useState<"monthly" | "growth">("monthly");
+  // Opening a month from the growth table lands on that month's report.
+  const [target, setTarget] = useState({ year: last.getFullYear(), month: last.getMonth() + 1 });
+  const tabs = [
+    { id: "monthly", label: "Monthly report" },
+    { id: "growth", label: "Growth (net savings)" },
+  ] as const;
+  return (
+    <section className="space-y-4">
+      <h1 className="text-xl font-semibold print:hidden">Report</h1>
+      <div role="tablist" className="flex gap-1 border-b border-slate-200 print:hidden">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={tab === t.id}
+            onClick={() => setTab(t.id)}
+            className={`-mb-px rounded-t border-b-2 px-3 py-2 text-sm hover:bg-slate-100 ${
+              tab === t.id ? "border-accent font-medium text-slate-900" : "border-transparent text-slate-600"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {tab === "monthly" ? (
+        <MonthlyReport key={`${target.year}-${target.month}`} initial={target} />
+      ) : (
+        <GrowthReport
+          initialYear={target.year}
+          onOpenMonth={(y, m) => {
+            setTarget({ year: y, month: m });
+            setTab("monthly");
+          }}
+        />
+      )}
+    </section>
+  );
+}
+
+function MonthlyReport({ initial }: { initial: { year: number; month: number } }) {
+  const now = new Date();
+  const [year, setYear] = useState(initial.year);
+  const [month, setMonth] = useState(initial.month);
   const [dash, setDash] = useState<Dashboard | null>(null);
   const [budgets, setBudgets] = useState<Budgets | null>(null);
   const [failed, setFailed] = useState(false);
@@ -73,8 +115,7 @@ export default function ReportsPage() {
     <section className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-semibold">Monthly report</h1>
-          <div className="ml-2 flex items-center overflow-hidden rounded border border-slate-300 text-sm">
+          <div className="flex items-center overflow-hidden rounded border border-slate-300 text-sm">
             <button type="button" onClick={() => step(-1)} aria-label="Previous month" className="px-2.5 py-1.5 hover:bg-slate-100">
               ‹
             </button>

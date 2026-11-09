@@ -464,3 +464,17 @@ export type FlagExplanation = {
 };
 
 export type Similarity = { enabled: boolean; model: string; labelled: number; needed: number; embedded: number };
+
+export type InterestMonth = {
+  month: number;
+  interest: string;
+  tax: string;
+  average_balance: string | null;
+  days: number;
+  annual_rate: string | null;
+  monthly_rate: string | null;
+  assumed: string | null;
+  unrated: number;
+};
+
+export type InterestReport = { year: number; accounts: number; unrecognised: number; months: InterestMonth[] };

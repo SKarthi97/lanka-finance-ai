@@ -14,6 +14,7 @@ from app.routers import (
     overview,
     recurring,
     reports,
+    savings,
     search,
     system,
     transactions,
@@ -44,6 +45,7 @@ app.include_router(categories.router)
 app.include_router(transfers.router)
 app.include_router(notifications.router)
 app.include_router(budgets.router)
+app.include_router(savings.router)
 app.include_router(recurring.router)
 app.include_router(views.router)
 app.include_router(reports.router)
