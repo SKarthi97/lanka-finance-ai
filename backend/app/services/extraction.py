@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app import storage
 from app.adapters.base import ParsedStatement, ParseError
+from app.adapters.generic import GenericAdapter
 from app.adapters.registry import select_adapter
 from app.config import Settings
 from app.job_queue import PermanentJobError
@@ -123,7 +124,8 @@ def extract_transactions(db: Session, job: Job, settings: Settings) -> None:
     bank_code = document.bank.code if document.bank else None
     adapter = select_adapter(pages, bank_code)
     if adapter is None:
-        raise PermanentJobError("unsupported_layout")
+        # No bank recognised: a best-effort reader tries, and the result is checked like any other.
+        adapter = GenericAdapter()
 
     try:
         parsed = adapter.parse(pages)

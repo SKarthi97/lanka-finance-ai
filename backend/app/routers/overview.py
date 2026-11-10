@@ -102,6 +102,8 @@ class CategoryTotal(BaseModel):
     income: Decimal
     expense: Decimal
     transactions: int
+    parent_id: int | None = None  # set for a sub-category, so the page can group it under its parent
+    parent_name: str | None = None
 
 
 class BankTotal(BaseModel):
@@ -207,6 +209,10 @@ def _totals(
                 income=credit,
                 expense=debit,
                 transactions=n,
+                parent_id=category.parent_id if category else None,
+                parent_name=categories[category.parent_id].name
+                if category and category.parent_id in categories
+                else None,
             )
         )
 

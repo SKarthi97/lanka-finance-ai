@@ -109,7 +109,7 @@ export const CHECK_LABEL: Record<string, string> = {
 };
 
 export const ERROR_LABEL: Record<string, string> = {
-  unsupported_layout: "The layout was not recognised as a supported bank statement.",
+  unsupported_layout: "The layout was not recognised as a supported bank statement. Use the CSV import or type the rows on the Upload page.",
   format_mismatch: "This PDF does not match the selected bank's statement format.",
   statement_date_not_found: "The statement date was not found.",
   statement_date_invalid: "The statement date could not be read.",

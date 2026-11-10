@@ -39,7 +39,24 @@ Docker Desktop must be running at that time. A daily run at 21:00:
 schtasks /Create /SC DAILY /ST 21:00 /TN "Lanka Finance backup" /TR "powershell -NoProfile -ExecutionPolicy Bypass -File D:\lanka-finance-ai\scripts\backup.ps1"
 ```
 
-Remove it with `schtasks /Delete /TN "Lanka Finance backup" /F`.
+A safer version that checks every backup can be read back and keeps the newest 14 (the default):
+
+```
+schtasks /Create /SC DAILY /ST 21:00 /TN "Lanka Finance backup" /TR "powershell -NoProfile -ExecutionPolicy Bypass -File D:\lanka-finance-ai\scripts\backup.ps1 -Verify" /F
+```
+
+If the computer is often off at 21:00, open the task in Task Scheduler, go to Settings, and tick "Run task
+as soon as possible after a scheduled start is missed".
+
+Once a month, prove the newest backup restores (the drill uses its own copy and removes it):
+
+```
+schtasks /Create /SC MONTHLY /D 1 /ST 21:30 /TN "Lanka Finance restore drill" /TR "powershell -NoProfile -ExecutionPolicy Bypass -File D:\lanka-finance-ai\scripts\restore-drill.ps1" /F
+```
+
+Check them with `schtasks /Query /TN "Lanka Finance backup" /V /FO LIST`, run one now with
+`schtasks /Run /TN "Lanka Finance backup"`, and remove them with
+`schtasks /Delete /TN "Lanka Finance backup" /F` and `schtasks /Delete /TN "Lanka Finance restore drill" /F`.
 
 ## Prove it works: the restore drill
 

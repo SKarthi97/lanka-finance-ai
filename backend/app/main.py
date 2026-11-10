@@ -8,6 +8,8 @@ from app.routers import (
     budgets,
     categories,
     documents,
+    history,
+    imports,
     insights,
     ird,
     merchants,
@@ -42,7 +44,9 @@ app = FastAPI(
 app.include_router(system.router)
 app.include_router(auth.router)
 app.include_router(documents.router)
+app.include_router(imports.router)
 app.include_router(transactions.router)
+app.include_router(history.router)
 app.include_router(overview.router)
 app.include_router(trend.router)
 app.include_router(tracker.router)

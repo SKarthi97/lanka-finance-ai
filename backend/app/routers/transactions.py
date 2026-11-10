@@ -7,7 +7,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -81,7 +81,11 @@ def _conditions(user_id: int, f: Filters) -> list:
     if f.bank_code:
         conditions.append(Bank.code == f.bank_code)
     if f.category_id is not None:
-        conditions.append(Transaction.category_id == f.category_id)
+        # A parent category also shows what was filed under its sub-categories.
+        child_ids = select(Category.id).where(Category.parent_id == f.category_id)
+        conditions.append(
+            or_(Transaction.category_id == f.category_id, Transaction.category_id.in_(child_ids))
+        )
     if f.uncategorised:
         conditions.append(Transaction.category_id.is_(None))
     if f.year is not None:

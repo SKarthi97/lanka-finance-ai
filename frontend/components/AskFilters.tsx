@@ -3,7 +3,7 @@
 import { FormEvent, useState } from "react";
 import { AiBusy } from "@/components/AiBusy";
 import { api, ApiError, SearchReading, ViewFilters } from "@/lib/api";
-import { formatMs } from "@/lib/format";
+import { formatMoney, formatMs } from "@/lib/format";
 
 /** Type a question in plain words; it becomes ordinary filters you can see, change and save. */
 export function AskFilters({ onApply }: { onApply: (filters: ViewFilters) => void }) {
@@ -56,6 +56,32 @@ export function AskFilters({ onApply }: { onApply: (filters: ViewFilters) => voi
         <p role="alert" className="text-xs text-red-700">
           {error}
         </p>
+      )}
+      {reading?.answer && !busy && (
+        <div role="status" className="rounded border border-slate-200 bg-surface px-3 py-2 text-sm">
+          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{reading.answer.heading}</div>
+          <ul className="mt-1 flex flex-wrap gap-x-8 gap-y-1">
+            {reading.answer.parts.map((p) => (
+              <li key={p.label}>
+                <span className="text-slate-500">{p.label}: </span>
+                {p.value === null ? (
+                  <span className="text-slate-500">nothing matched</span>
+                ) : (
+                  <span className="font-semibold tabular-nums">
+                    {reading.answer?.kind === "count" ? p.value : formatMoney(p.value)}
+                  </span>
+                )}
+                {p.value !== null && reading.answer?.kind !== "count" && (
+                  <span className="text-xs text-slate-500"> ({p.count} transaction{p.count === 1 ? "" : "s"})</span>
+                )}
+                {p.detail && <div className="text-xs text-slate-500">{p.detail}</div>}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1 text-xs text-slate-500">
+            Worked out from your statements by the filters shown below (transfers and repeated rows left out). No AI wrote this number.
+          </p>
+        </div>
       )}
       {reading && !busy && (
         <p role="status" className="text-xs text-slate-600">

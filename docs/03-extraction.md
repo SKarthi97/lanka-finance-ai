@@ -340,3 +340,20 @@ categories in 0007).
 
 Categorisation and duplicate removal are implemented: see `04-categorization.md` and the
 "Duplicate transactions" section above.
+
+## Layouts no adapter knows, and statements that are not PDFs
+
+**Fallback reader** (`adapters/generic.py`). When no bank adapter recognises a PDF, the worker tries a
+best-effort reader instead of failing at once. It looks for lines of the form `DATE DESCRIPTION AMOUNT
+[AMOUNT] BALANCE` (the date must carry a year; day first). Every row must move the balance by exactly its
+amount, and the statement is `reconciled` only if the statement's own "closing balance" line agrees. With no
+such line, or if any row does not follow, it goes to review. It reads only text PDFs (no OCR) and
+only the one-row-per-line shape; anything else still fails with `unsupported_layout`.
+
+**CSV import and typed rows** (`services/importer.py`, `routers/imports.py`; Upload page, "No PDF..."
+panel). `POST /api/imports/csv` (file, optional `bank_code`, `account_number`, `opening_balance`) and
+`POST /api/imports/manual` (JSON rows). A CSV needs a header row with a date, a description and either
+Debit and Credit or one signed Amount column; a Balance column is optional (then an opening balance is
+needed). Dates are read day first. The rows become a document with adapter `import` and are checked like
+any statement; the same rows imported twice are refused (409). Errors are short codes with a row number,
+never row text.

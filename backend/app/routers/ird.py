@@ -14,7 +14,7 @@ from app.db import get_db
 from app.deps import get_current_session
 from app.models import Account, Bank, Category, Document, Setting, Transaction, UserSession
 from app.routers.transactions import _safe
-from app.services import coverage, ird
+from app.services import coverage, ird, ird_pack
 from app.services.extraction import ACTIVE_STATUSES
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
@@ -299,7 +299,7 @@ def build(db: Session, user_id: int, year: int) -> IrdOut:
         by_category=[
             CategoryRow(head=h, category=c, amount=v) for (h, c), v in sorted(by_category.items())
         ],
-        lines=[l for kind in ("employment", "interest", "dividends", "tax") for l in lines[kind]],
+        lines=[line for kind in ("employment", "interest", "dividends", "tax") for line in lines[kind]],
         uncategorised_credits=uncategorised,
         uncategorised_count=uncategorised_count,
         extras=load_extras(db, user_id, year),
@@ -385,4 +385,19 @@ def ird_csv(
         buffer.getvalue(),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="ird-{report.label.replace("/", "-")}.csv"'},
+    )
+
+
+@router.get("/ird.pdf")
+def ird_pdf(
+    year: int | None = Query(default=None, ge=2000, le=2100),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> Response:
+    """A printable pack for an accountant: the figures, what to check, and the transactions."""
+    report = build(db, session.user_id, year if year is not None else ird.assessment_year(date.today()))
+    return Response(
+        ird_pack.build_pdf(report, date.today(), MAX_LINES),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="ird-{report.label.replace("/", "-")}.pdf"'},
     )

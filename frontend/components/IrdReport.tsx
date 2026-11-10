@@ -99,6 +99,14 @@ export function IrdReport() {
           Print / save as PDF
         </button>
         <a
+          href={`/api/reports/ird.pdf?year=${year}`}
+          download={`ird-${year}-${String(year + 1).slice(-2)}.pdf`}
+          className="rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100"
+          title="Figures, what to check and the transactions behind them, laid out for an accountant"
+        >
+          ⬇ PDF for your accountant
+        </a>
+        <a
           href={`/api/reports/ird.csv?year=${year}`}
           download={`ird-${year}-${String(year + 1).slice(-2)}.csv`}
           className="rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100"

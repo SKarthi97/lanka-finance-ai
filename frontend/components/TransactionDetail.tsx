@@ -45,6 +45,14 @@ export function TransactionDetail({
       .catch(() => setFlags([]));
   }, [t.id]);
 
+  // Where it came from and what was changed; reloaded when the category or merchant name changes.
+  const [history, setHistory] = useState<{ current: string; events: { at: string; kind: string; text: string }[] } | null>(null);
+  useEffect(() => {
+    api<{ current: string; events: { at: string; kind: string; text: string }[] }>(`/transactions/${t.id}/history`)
+      .then(setHistory)
+      .catch(() => setHistory(null));
+  }, [t.id, t.category_id, t.merchant]);
+
   async function explain() {
     setExplaining(true);
     setExplainError(null);
@@ -266,6 +274,21 @@ export function TransactionDetail({
             <p className="mt-1 text-slate-500">No rule or AI suggestion matched this transaction.</p>
           )}
         </div>
+
+        {history && (
+          <>
+            <h3 className="mb-2 mt-5 text-sm font-medium">History</h3>
+            <ol className="space-y-2 rounded border border-slate-200 bg-surface p-4 text-sm">
+              {history.events.map((e, i) => (
+                <li key={i}>
+                  <div className="text-xs text-slate-500">{formatDate(e.at.slice(0, 10))}</div>
+                  <div>{e.text}</div>
+                </li>
+              ))}
+              <li className="border-t border-slate-200 pt-2 text-slate-600">Now: {history.current}</li>
+            </ol>
+          </>
+        )}
 
         {t.is_duplicate && (
           <p className="mt-5 rounded bg-amber-50 px-4 py-3 text-sm text-amber-800">

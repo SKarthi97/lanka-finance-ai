@@ -10,7 +10,8 @@ export default defineConfig([
   globalIgnores([".next/**", "node_modules/**", "next-env.d.ts", "playwright-report/**", "test-results/**"]),
   {
     rules: {
-      "react-hooks/set-state-in-effect": "warn",
+      // Pages load their data in effects on purpose; the rule would flag ~30 places that work fine.
+      "react-hooks/set-state-in-effect": "off",
       "react-hooks/purity": "warn",
       "react-hooks/immutability": "warn",
       "react-hooks/refs": "warn",

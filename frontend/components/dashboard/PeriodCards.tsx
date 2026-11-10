@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { BankTotal, CategoryTotal, Totals } from "@/lib/api";
+import { rollUp } from "@/lib/rollup";
 import { bankTint, compareText, formatMoney } from "@/lib/format";
 
 export function Card({
@@ -29,7 +30,7 @@ export function Card({
 
 export function CategoryBars({ items, filter }: { items: CategoryTotal[]; filter: string }) {
   // Spending by category, transfers excluded. The biggest few, then the rest.
-  const spending = items
+  const spending = rollUp(items)
     .filter((c) => c.kind !== "transfer" && Number(c.expense) > 0)
     .sort((a, b) => Number(b.expense) - Number(a.expense));
   if (spending.length === 0) return null;
@@ -38,7 +39,7 @@ export function CategoryBars({ items, filter }: { items: CategoryTotal[]; filter
   const top = spending.slice(0, 8);
   const rest = spending.slice(8);
   const rows = rest.length
-    ? [...top, { ...rest[0], category_id: -1, name: `${rest.length} more`, expense: String(rest.reduce((n, c) => n + Number(c.expense), 0)) }]
+    ? [...top, { ...rest[0], children: [], category_id: -1, name: `${rest.length} more`, expense: String(rest.reduce((n, c) => n + Number(c.expense), 0)) }]
     : top;
 
   return (
@@ -66,6 +67,14 @@ export function CategoryBars({ items, filter }: { items: CategoryTotal[]; filter
                 {formatMoney(c.expense)} · {share.toFixed(0)}%
               </span>
             </div>
+            {"children" in c && (c as { children: CategoryTotal[] }).children.length > 0 && (
+              <div className="text-xs text-slate-500">
+                {(c as { children: CategoryTotal[] }).children
+                  .filter((k) => Number(k.expense) > 0)
+                  .map((k) => `${k.name} ${formatMoney(k.expense)}`)
+                  .join(" · ")}
+              </div>
+            )}
             <div className="mt-0.5 h-1.5 rounded bg-slate-100" aria-hidden="true">
               <div
                 className={`h-1.5 rounded ${uncategorised ? "bg-amber-400" : "bg-accent"}`}

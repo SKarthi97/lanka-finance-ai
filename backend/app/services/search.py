@@ -61,7 +61,9 @@ _IN = re.compile(r"\b(received|receive|income|earned|earn|deposits?|credits?|inc
 STOP = set(
     "show me all my the a an of in on for from with and only list find what how much did i were was "
     "are is to at by than between last this previous month year transactions transaction "
-    "payments payment please where which that".split()
+    "payments payment please where which that "
+    "total sum average avg mean count number many largest biggest highest smallest lowest cheapest "
+    "expensive most least top".split()
 )
 MAX_FALLBACK_WORDS = 3
 

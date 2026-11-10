@@ -245,3 +245,12 @@ history, no free text from the model in the answer. I would build a 40-question 
 first, in the style of the categoriser evaluation.
 
 **Recommendation:** leave 4.7 dropped; build 4.8 when you want it.
+
+## Numbers worked out by code (4.8)
+
+`services/answers.py`. A question that asks for a number ("how much", "total", "how many", "average",
+"largest", "smallest") is read by `search.interpret` as usual (dates, amounts, direction, bank, category), then
+the number is computed by exact arithmetic over the matching rows: statements that count, repeated rows and
+transfers left out, as in the reports. The model never writes or checks the number. `POST /api/search/interpret`
+returns it as `answer` beside the filters, so the page shows both the number and the filters it came from.
+Not done: comparing two months in one question, and chat history (each question stands alone).

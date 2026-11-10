@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings, get_settings
 from app.db import get_db
 from app.deps import get_current_session
-from app.models import Transaction, UserSession
+from app.models import AuditLog, Transaction, UserSession
 from app.routers.ai import ProgressOut, progress_out
 from app.services import ai_activity, merchants
 from app.services.categorizer import description_stem
@@ -50,6 +50,7 @@ def rename_merchant(
         raise _error(422, "name_required", "Enter a name.")
     stem = _stem_of(db, session.user_id, transaction_id)
     merchants.set_manual(db, session.user_id, stem, name)
+    db.add(AuditLog(user_id=session.user_id, action="transaction.merchant_rename", entity="transaction", entity_id=str(transaction_id), detail={"name": name[:64]}))
     db.commit()
     return NameOut(merchant=name, merchant_source="manual")
 
@@ -64,6 +65,7 @@ def reset_merchant(
     propose a name on its next pass)."""
     stem = _stem_of(db, session.user_id, transaction_id)
     merchants.clear(db, session.user_id, stem)
+    db.add(AuditLog(user_id=session.user_id, action="transaction.merchant_reset", entity="transaction", entity_id=str(transaction_id)))
     db.commit()
     return NameOut(merchant=merchants.rule_clean(stem), merchant_source="rule")
 

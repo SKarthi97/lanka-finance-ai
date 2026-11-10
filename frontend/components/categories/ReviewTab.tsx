@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AiBusy } from "@/components/AiBusy";
-import { CategoryItem, CategorizationStatus, ReviewQueue, Similarity, Suggestions, api } from "@/lib/api";
+import { CategoryItem, CategorizationStatus, ReviewQueue, Similarity, api } from "@/lib/api";
 import { primary, subtle, CategorySelect, Run } from "@/components/categories/shared";
 
 export function ReviewTab({

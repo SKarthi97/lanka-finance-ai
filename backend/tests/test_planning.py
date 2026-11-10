@@ -322,3 +322,65 @@ def test_dividend_is_an_income_category_with_rules():
 
     assert ("Dividend", "income") in CATEGORIES
     assert any(cat == "Dividend" for _p, _t, cat, _pr in RULES)
+
+
+# --- sub-categories roll up into their parent ----------------------------------------------
+
+
+def test_a_parent_budget_and_filter_include_its_sub_categories(logged_in, session_factory, test_settings):
+    client, csrf = logged_in
+    run_pipeline(client, csrf, session_factory, test_settings, september())
+    ids = category_ids(client)
+    parent = ids["Food and dining"]
+    child = client.post(
+        "/api/categories", json={"name": "Groceries", "kind": "expense", "parent_id": parent}, headers=H(csrf)
+    ).json()["id"]
+    file_under(client, csrf, "ATM CASH WITHDRAWAL", child)
+
+    assert set_budget(client, csrf, parent, "1000.00").status_code == 200
+    line = next(b for b in budgets(client)["items"] if b["category_id"] == parent)
+    assert line["spent"] == "500.00"  # the sub-category's spending counts against the parent
+
+    listed = client.get(f"/api/transactions?category_id={parent}").json()["items"]
+    assert [t["description"] for t in listed] == ["ATM CASH WITHDRAWAL"]
+
+    dash = client.get("/api/dashboard?year=2022&month=9").json()
+    row = next(c for c in dash["month_by_category"] if c["category_id"] == child)
+    assert (row["parent_id"], row["parent_name"]) == (parent, "Food and dining")
+
+
+# --- numbers worked out by code ------------------------------------------------------------
+
+
+def ask(client, csrf, query):
+    return client.post("/api/search/interpret", json={"query": query}, headers=H(csrf)).json()
+
+
+def test_a_question_for_a_total_gets_a_computed_answer(logged_in, session_factory, test_settings):
+    client, csrf = logged_in
+    run_pipeline(client, csrf, session_factory, test_settings, september())
+
+    spent = ask(client, csrf, "how much did I spend in september 2022")
+    assert spent["filters"]["direction"] == "out" and spent["filters"]["q"] is None
+    assert spent["answer"]["kind"] == "sum"
+    assert [(p["label"], p["value"], p["count"]) for p in spent["answer"]["parts"]] == [("Money out", "500.00", 1)]
+
+    both = ask(client, csrf, "total in september 2022")["answer"]["parts"]
+    assert [(p["label"], p["value"]) for p in both] == [("Money out", "500.00"), ("Money in", "2500.00")]
+
+    count = ask(client, csrf, "how many transactions in september 2022")["answer"]
+    assert [p["value"] for p in count["parts"]] == ["1", "1"]
+
+    biggest = ask(client, csrf, "largest money in september 2022")["answer"]["parts"][0]
+    assert biggest["value"] == "2500.00" and "SALARY" in biggest["detail"]
+
+    average = ask(client, csrf, "average spent in september 2022")["answer"]["parts"][0]
+    assert average["value"] == "500.00"
+
+
+def test_a_question_without_a_number_asked_has_no_answer(logged_in, session_factory, test_settings):
+    client, csrf = logged_in
+    run_pipeline(client, csrf, session_factory, test_settings, september())
+    assert ask(client, csrf, "salary in september 2022")["answer"] is None
+    nothing = ask(client, csrf, "how much did I spend in january 2020")["answer"]["parts"][0]
+    assert (nothing["value"], nothing["count"]) == (None, 0)

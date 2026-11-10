@@ -137,3 +137,14 @@ error states share `components/states.tsx`; dialogs share `components/ConfirmDia
 - English only; no i18n.
 - The detail panel shows data already loaded; it does not open the source PDF page unless the
   original is still stored (see `RETAIN_DOCUMENTS` in `02-upload-and-queue.md`).
+
+## Import without a PDF, ask for a number, history
+
+* **Upload page, "No PDF, or a statement the app cannot read?"**: import a CSV or type rows by hand
+  (see `03-extraction.md`).
+* **Ask in plain words** (Transactions page) now also answers questions that ask for a number: "how much
+  did I spend on fuel in March", "how many transactions over 10k last month", "average spent in 2025",
+  "largest money in September". The answer box shows money out and money in separately unless the question
+  names one, and says the filters it used.
+* **Transaction side panel, History**: where the row was read from (statement or import), every category you
+  changed, merchant names you set or cleared, and its category now with the reason.

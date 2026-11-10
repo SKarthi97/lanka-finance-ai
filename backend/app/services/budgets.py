@@ -74,13 +74,23 @@ def status(limit: Decimal, spent: Decimal) -> tuple[int, str]:
 
 def lines(db: Session, user_id: int, year: int, month: int) -> list[BudgetLine]:
     spent = spent_by_category(db, user_id, year, month)
+    children: dict[int, list[int]] = {}
+    for child_id, parent_id in db.execute(
+        select(Category.id, Category.parent_id).where(
+            Category.user_id == user_id, Category.parent_id.is_not(None)
+        )
+    ):
+        children.setdefault(parent_id, []).append(child_id)
     out: list[BudgetLine] = []
     for budget, category in db.execute(
         select(Budget, Category)
         .join(Category, Category.id == Budget.category_id)
         .where(Budget.user_id == user_id)
     ).all():
-        used = spent.get(category.id, ZERO)
+        # A budget on a parent category also counts what its sub-categories spent.
+        used = spent.get(category.id, ZERO) + sum(
+            (spent.get(child, ZERO) for child in children.get(category.id, [])), ZERO
+        )
         percent, state = status(budget.monthly_amount, used)
         out.append(
             BudgetLine(

@@ -66,12 +66,12 @@ export function GrowthReport({
   const worst = active.reduce<TrendMonth | null>((a, m) => (a === null || cents(m.net) < cents(a.net) ? m : a), null);
   const biggest = Math.max(1, ...active.map((m) => Math.abs(cents(m.net))));
 
-  let running = 0;
-  const rows = (trend?.months ?? []).map((m) => {
+  const rows = (trend?.months ?? []).reduce<{ m: TrendMonth; has: boolean; cumulative: number }[]>((acc, m) => {
     const has = past(m) && (cents(m.income) !== 0 || cents(m.expense) !== 0);
-    if (has) running += cents(m.net);
-    return { m, has, cumulative: running };
-  });
+    const before = acc.length ? acc[acc.length - 1].cumulative : 0;
+    acc.push({ m, has, cumulative: has ? before + cents(m.net) : before });
+    return acc;
+  }, []);
 
   const rateOf = (month: number) => interest?.months.find((r) => r.month === month);
   const interestTotal = (interest?.months ?? []).reduce((n, r) => n + cents(r.interest), 0);

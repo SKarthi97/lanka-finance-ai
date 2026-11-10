@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { LoadError, RowsSkeleton } from "@/components/states";
 import { api, ApiError, DocumentItem } from "@/lib/api";
+import { ImportPanel } from "@/components/ImportPanel";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ACTIVE_STATUSES, bankTint, explainError } from "@/lib/format";
 
@@ -298,6 +299,8 @@ export default function UploadPage() {
           )}
         </div>
       </form>
+
+      <ImportPanel onDone={loadDocuments} />
 
       <div>
         <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">

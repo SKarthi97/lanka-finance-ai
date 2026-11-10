@@ -191,6 +191,8 @@ export type CategoryTotal = {
   income: string;
   expense: string;
   transactions: number;
+  parent_id: number | null;
+  parent_name: string | null;
 };
 
 export type TopExpense = {
@@ -440,6 +442,13 @@ export type SearchReading = {
   ai_error: string | null;
   took_ms: number;
   model_ms: number | null;
+  answer: SearchAnswer | null;
+};
+
+export type SearchAnswer = {
+  kind: "sum" | "count" | "average" | "largest" | "smallest";
+  heading: string;
+  parts: { label: string; value: string | null; count: number; detail: string | null }[];
 };
 
 export type SavedViewItem = { id: number; name: string; filters: ViewFilters };

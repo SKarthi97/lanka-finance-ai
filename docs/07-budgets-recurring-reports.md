@@ -98,3 +98,21 @@ Four things, all arithmetic on the statements (no model):
 The IRD tab also has "Tax paid outside the bank": the employer's tax (APIT) and other tax paid, with
 a note, kept per year of assessment (`GET/PUT /api/reports/ird/extras?year=`, stored in `settings`).
 They are shown on the page and in the CSV, and are not mixed into the figures read from statements.
+
+## Sub-categories roll up into their parent
+
+A sub-category (one level, see `04-categorization.md`) now counts toward its parent:
+
+* a **budget** on a parent counts what its sub-categories spent (a budget on the sub-category counts only
+  its own);
+* **Spending by category** on the dashboard and the Reports page shows one line per parent with the
+  breakdown underneath (`frontend/lib/rollup.ts`, sums in whole cents); the API still returns each category
+  separately with `parent_id` and `parent_name`;
+* filtering Transactions by a parent category also shows its sub-categories' rows.
+
+## IRD pack for an accountant
+
+`GET /api/reports/ird.pdf?year=` (`services/ird_pack.py`, button "PDF for your accountant"): a printable PDF
+with the figures, what to check (statements in review, uncategorised credits, possible tax, missing months),
+the month and bank tables and up to 300 of the transactions behind them. Built from the same report as the IRD
+tab, with the same "not tax advice" note.

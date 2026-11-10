@@ -7,6 +7,7 @@ import { GrowthReport } from "@/components/GrowthReport";
 import { IrdReport } from "@/components/IrdReport";
 import { api, Budgets, Dashboard, MonthSummary } from "@/lib/api";
 import { MONTHS_LONG, bankTint, formatDate, formatMoney, formatMs } from "@/lib/format";
+import { rollUp } from "@/lib/rollup";
 
 const select = "rounded border border-slate-300 bg-surface px-2 py-1.5 text-sm";
 const th = "px-3 py-1.5 font-medium";
@@ -110,7 +111,7 @@ function MonthlyReport({ initial }: { initial: { year: number; month: number } }
   const years = Array.from(new Set([...(dash?.years ?? []), now.getFullYear(), year])).sort((a, b) => a - b);
   const title = `${MONTHS_LONG[month - 1]} ${year}`;
   const totals = dash?.month;
-  const spending = (dash?.month_by_category ?? [])
+  const spending = rollUp(dash?.month_by_category ?? [])
     .filter((c) => c.kind !== "transfer" && Number(c.expense) > 0)
     .sort((a, b) => Number(b.expense) - Number(a.expense));
   const transfers = Number(totals?.transfers_in ?? 0) + Number(totals?.transfers_out ?? 0);
@@ -310,6 +311,11 @@ function MonthlyReport({ initial }: { initial: { year: number; month: number } }
                             <tr key={c.category_id ?? "none"} className="border-b border-slate-100 last:border-0">
                               <td className="px-3 py-1.5">
                                 <div>{c.name}</div>
+                                {c.children.length > 0 && (
+                                  <div className="text-xs text-slate-500">
+                                    {c.children.filter((k) => Number(k.expense) > 0).map((k) => `${k.name} ${formatMoney(k.expense)}`).join(" · ")}
+                                  </div>
+                                )}
                                 <div className="mt-1 h-1.5 w-full max-w-xs overflow-hidden rounded bg-slate-200" aria-hidden="true">
                                   <div className="h-full rounded bg-accent" style={{ width: `${Math.max(share, 1)}%` }} />
                                 </div>

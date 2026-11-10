@@ -45,7 +45,7 @@ def test_a_year_with_a_salary_shows_it_and_its_month(logged_in, session_factory,
     assert report["total_income"] == "2500.00"
     sep = next(m for m in report["months"] if (m["year"], m["month"]) == (2022, 9))
     assert sep["employment"] == "2500.00"
-    assert [l["kind"] for l in report["lines"]] == ["employment"]
+    assert [line["kind"] for line in report["lines"]] == ["employment"]
     assert report["banks"][0]["employment"] == "2500.00"
     covered = report["coverage"][0]
     assert covered["covered"] == 1 and len(covered["missing"]) == 11  # only September 2022 has a statement
@@ -128,3 +128,17 @@ def test_negative_amounts_are_refused(logged_in):
     client, csrf = logged_in
     r = client.put("/api/reports/ird/extras?year=2025", json={"employer_tax": "-5"}, headers={"X-CSRF-Token": csrf})
     assert r.status_code in (400, 422)
+
+
+def test_the_accountant_pdf_has_the_figures_and_the_transactions(logged_in, session_factory, test_settings):
+    import pymupdf
+
+    client, csrf = logged_in
+    run_pipeline(client, csrf, session_factory, test_settings, september())
+    response = client.get("/api/reports/ird.pdf?year=2022")
+    assert response.status_code == 200 and response.headers["content-type"] == "application/pdf"
+    assert "ird-2022-23.pdf" in response.headers["content-disposition"]
+    pdf = pymupdf.open(stream=response.content, filetype="pdf")
+    text = "".join(page.get_text() for page in pdf)
+    assert "2022/23" in text and "2,500.00" in text and "SALARY" in text.upper()
+    assert "not tax advice" in text
