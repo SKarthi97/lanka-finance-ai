@@ -14,6 +14,7 @@ talks only to the Next.js server, which proxies `/api` to the backend on the int
 | Budgets (`/budgets`) | Monthly limits per expense category, with progress |
 | Recurring (`/recurring`) | Payments and income that repeat on a schedule |
 | Reports (`/reports`) | Tabs: Monthly report, Growth (net savings and interest), IRD (Sri Lanka) |
+| Savings (`/savings`) | What each bank pays, falling rates, idle money, where the balance is heading |
 | Statement (`/documents/{id}`) | One statement: status, checks, issues, rows, source pages |
 | System (`/system`) | Local AI status, hardware, and a collapsible AI activity card |
 | Settings (`/settings`) | Account, password, remembered choices, Local AI status |
@@ -43,7 +44,7 @@ Settings, Account. `POST /api/auth/change-password` with the current and new pas
 The bell in the top bar (it replaced the gear; Settings stays in the sidebar) shows a count and a
 list of what needs attention: an account whose latest statement ended more than 45 days ago,
 months with no statement, statements that did not reconcile, balance breaks between statements,
-and possible transfers between your own accounts. The list is worked out from the data each time
+possible transfers between your own accounts, and an interest rate that has fallen. The list is worked out from the data each time
 (`GET /api/notifications`, `services/notifications.py`), so a notice disappears when its cause
 is fixed and nothing needs marking as read. Text holds bank names, the last four digits and
 dates only, never descriptions or amounts.
@@ -100,6 +101,7 @@ and failed.
 
 ## Categories page
 
+- Categories tab: add (optionally under a parent), rename and move categories you made. Rules tab: rules by words, direction and amount, and a button to re-run the rules.
 - Transfers tab: possible transfers between your own accounts (same amount, different accounts,
   within 3 days). "Yes, my own accounts" files both halves as Transfers; "Not a transfer" is
   remembered. The dashboard links here (`?tab=transfers`). See `03-extraction.md`.

@@ -96,3 +96,18 @@ database, remove the `pgdata` volume (`docker compose down`, then
 - [ ] Backup path chosen, outside OneDrive
 - [ ] `tests/fixtures/private/` exists and is gitignored
 - [ ] First-bank choice recorded (open item in `00-architecture.md` §10)
+
+
+## Optional compose overrides
+
+* **GPU** (`docker-compose.gpu.yml`): lets Ollama use an NVIDIA GPU.
+  `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d`. Check with
+  `docker compose exec ollama nvidia-smi`; the warm-up time on the System page should drop sharply.
+* **Offline** (`docker-compose.offline.yml`): gives the backend, worker, database and Ollama no route to
+  the internet (the app never needs one). Download the models first, then
+  `docker compose -f docker-compose.yml -f docker-compose.offline.yml up -d`. The frontend stays on the
+  outer network only because Docker cannot publish a port from an internal-only network.
+* The two can be combined by listing both `-f` files after the base one.
+
+All services have health checks (`docker compose ps` shows them). The worker proves it is alive by
+touching a heartbeat file every 10 seconds (a long model call does not make it look dead).

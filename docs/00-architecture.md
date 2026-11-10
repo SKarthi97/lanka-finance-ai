@@ -215,8 +215,9 @@ Revised ordering: vertical slice first, then breadth. Each phase includes tests,
 
 ## 12. Implementation status
 
-Migrations 0001 to 0014 (`backend/alembic/versions`). The suite has about 480 backend tests on
-synthetic data; the frontend is checked with `tsc` and `next build` (no component tests yet).
+Migrations 0001 to 0015 (`backend/alembic/versions`). The suite has about 510 backend tests on
+synthetic data; the frontend is checked with `tsc`, ESLint and `next build`, plus browser smoke
+tests (Playwright, `docs/09-development.md`). CI runs both on GitHub Actions.
 
 | Area | State | Where it is described |
 |---|---|---|
@@ -235,8 +236,11 @@ synthetic data; the frontend is checked with `tsc` and `next build` (no componen
 | IRD (Sri Lanka) figures by year of assessment | Done; figures not yet checked against real certificates | `07-budgets-recurring-reports.md` |
 | Backup and restore scripts, manual categories kept on re-extract, per-bank duplicate matching | Done (scripts untested on the real install until run) | `06-backup-and-restore.md` |
 | Ollama health and hardware screen, AI activity log | Done | System page |
+| Savings page: bank comparison, falling-rate alert, idle money, projection | Done | `07-budgets-recurring-reports.md` |
+| Rules by direction and amount, renaming and sub-categories, re-run button | Done | `04-categorization.md` |
+| Healthchecks on every service (worker heartbeat, frontend), offline and GPU compose overrides, restore drill | Done (overrides and drill untried on the real install) | `windows-setup.md`, `06-backup-and-restore.md` |
+| Lint (ruff, ESLint), CI, browser smoke tests | Added, to be run once locally | `09-development.md` |
 | Generic adapter; LLM extraction fallback; OCR; other banks | Not started | |
-| Offline compose override, GPU override, healthchecks for the worker and frontend | Not started | |
 | Assistant (function calling), Excel export | Not started | |
 
 ### Where the code differs from the design above

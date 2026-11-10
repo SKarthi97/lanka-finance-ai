@@ -302,6 +302,8 @@ export type CategoryItem = {
   kind: "income" | "expense" | "transfer";
   is_system: boolean;
   transactions: number;
+  parent_id: number | null;
+  full_name: string; // "Parent › Child" for a sub-category
 };
 
 export type RuleItem = {
@@ -314,6 +316,9 @@ export type RuleItem = {
   priority: number;
   enabled: boolean;
   hit_count: number;
+  min_amount: string | null;
+  max_amount: string | null;
+  direction: "in" | "out" | null;
 };
 
 export type ReviewQueue = {
@@ -479,6 +484,8 @@ export type InterestMonth = {
 
 export type InterestReport = { year: number; accounts: number; unrecognised: number; months: InterestMonth[] };
 
+export type IrdExtras = { employer_tax: string; other_tax_paid: string; notes: string };
+
 export type IrdReport = {
   year: number;
   label: string;
@@ -516,6 +523,7 @@ export type IrdReport = {
   }[];
   uncategorised_credits: string;
   uncategorised_count: number;
+  extras: IrdExtras;
   review_documents: number;
   possible_tax: string;
   possible_tax_count: number;
@@ -525,4 +533,40 @@ export type IrdReport = {
     covered: number;
     missing: { year: number; month: number }[];
   }[];
+};
+
+export type SavingsInsights = {
+  as_of: string | null;
+  banks: {
+    bank_code: string | null;
+    bank_name: string | null;
+    accounts: number;
+    interest: string;
+    average_balance: string;
+    annual_rate: string;
+  }[];
+  best_rate: string | null;
+  drops: {
+    bank_code: string | null;
+    bank_name: string | null;
+    previous_rate: string;
+    latest_rate: string;
+    since: string;
+  }[];
+  idle: {
+    bank_code: string | null;
+    bank_name: string | null;
+    last4: string | null;
+    average_balance: string;
+    could_earn_a_year: string | null;
+    best_rate: string | null;
+  }[];
+  projection: {
+    current_balance: string;
+    monthly_change: string;
+    months_used: number;
+    points: { day: string; balance: string }[];
+    months_to_goal: number | null;
+    goal_reached: boolean;
+  } | null;
 };

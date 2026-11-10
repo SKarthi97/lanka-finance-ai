@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { LoadError, RowsSkeleton } from "@/components/states";
-import { api, IrdReport as Ird } from "@/lib/api";
+import { api, ApiError, IrdExtras, IrdReport as Ird } from "@/lib/api";
 import { MONTHS, bankTint, formatDate, formatMoney } from "@/lib/format";
 
 const select = "rounded border border-slate-300 bg-surface px-2 py-1.5 text-sm";
@@ -35,6 +35,35 @@ export function IrdReport() {
       .then(setData)
       .catch(() => setFailed(true));
   }, [year, attempt]);
+
+  // Figures that are not on a statement, typed in by you (the employer's tax certificate, for example).
+  const [extras, setExtras] = useState<IrdExtras>({ employer_tax: "", other_tax_paid: "", notes: "" });
+  const [savedNote, setSavedNote] = useState<string | null>(null);
+  useEffect(() => {
+    if (!data) return;
+    const zero = (v: string) => (Number(v) === 0 ? "" : v);
+    setExtras({ employer_tax: zero(data.extras.employer_tax), other_tax_paid: zero(data.extras.other_tax_paid), notes: data.extras.notes });
+  }, [data]);
+
+  async function saveExtras() {
+    const plain = /^\d+(\.\d{1,2})?$/;
+    for (const v of [extras.employer_tax, extras.other_tax_paid]) {
+      if (v !== "" && !plain.test(v)) {
+        setSavedNote("Amounts must be plain numbers such as 120000 or 5000.50.");
+        return;
+      }
+    }
+    try {
+      await api(`/reports/ird/extras?year=${year}`, {
+        method: "PUT",
+        json: { employer_tax: extras.employer_tax || "0", other_tax_paid: extras.other_tax_paid || "0", notes: extras.notes },
+      });
+      setSavedNote("Saved.");
+      setAttempt((n) => n + 1);
+    } catch (err) {
+      setSavedNote(err instanceof ApiError ? err.message : "Could not save.");
+    }
+  }
 
   const years = Array.from({ length: 7 }, (_, i) => currentYear() - i);
   const head = (key: string) => data?.heads.find((h) => h.key === key);
@@ -190,6 +219,60 @@ export function IrdReport() {
               deposits that may be your own money and are not added.
             </p>
           </div>
+
+          <section aria-label="Figures you enter" className="rounded border border-slate-200 bg-surface p-4 print:break-inside-avoid">
+            <h3 className="font-medium">Tax paid outside the bank (entered by you)</h3>
+            <p className="mb-3 text-xs text-slate-500">
+              Not on any statement: the tax your employer deducted (the APIT figure on their certificate) and tax you paid in
+              another way. Kept for {label(year)} only, in this app&apos;s database, and included in the CSV.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-3 print:hidden">
+              <label className="text-sm">
+                Employer tax (APIT)
+                <input
+                  inputMode="decimal"
+                  value={extras.employer_tax}
+                  onChange={(e) => setExtras({ ...extras, employer_tax: e.target.value })}
+                  placeholder="0.00"
+                  className="mt-1 w-full rounded border border-slate-300 bg-surface px-2 py-1.5 text-sm"
+                />
+              </label>
+              <label className="text-sm">
+                Other tax paid
+                <input
+                  inputMode="decimal"
+                  value={extras.other_tax_paid}
+                  onChange={(e) => setExtras({ ...extras, other_tax_paid: e.target.value })}
+                  placeholder="0.00"
+                  className="mt-1 w-full rounded border border-slate-300 bg-surface px-2 py-1.5 text-sm"
+                />
+              </label>
+              <label className="text-sm">
+                Note
+                <input
+                  value={extras.notes}
+                  maxLength={500}
+                  onChange={(e) => setExtras({ ...extras, notes: e.target.value })}
+                  placeholder="for example: from the T10"
+                  className="mt-1 w-full rounded border border-slate-300 bg-surface px-2 py-1.5 text-sm"
+                />
+              </label>
+            </div>
+            <div className="mt-3 flex items-center gap-3 print:hidden">
+              <button type="button" onClick={saveExtras} className="rounded bg-accent px-3 py-1.5 text-sm text-accent-fg">
+                Save
+              </button>
+              {savedNote && (
+                <span role="status" className="text-xs text-slate-500">
+                  {savedNote}
+                </span>
+              )}
+            </div>
+            <p className="mt-2 hidden text-sm print:block">
+              Employer tax (APIT): {formatMoney(data.extras.employer_tax)} · other tax paid: {formatMoney(data.extras.other_tax_paid)}
+              {data.extras.notes ? ` · ${data.extras.notes}` : ""}
+            </p>
+          </section>
 
           <section>
             <h3 className="mb-1 font-medium">Month by month</h3>

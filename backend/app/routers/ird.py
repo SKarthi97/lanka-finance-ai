@@ -6,13 +6,13 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import get_current_session
-from app.models import Account, Bank, Category, Document, Transaction, UserSession
+from app.models import Account, Bank, Category, Document, Setting, Transaction, UserSession
 from app.routers.transactions import _safe
 from app.services import coverage, ird
 from app.services.extraction import ACTIVE_STATUSES
@@ -78,6 +78,30 @@ class AccountCover(BaseModel):
     missing: list[MissingMonth]
 
 
+class Extras(BaseModel):
+    """Figures that are not on a bank statement, entered by you for one year of assessment."""
+
+    employer_tax: Decimal = Field(default=ZERO, ge=0)  # tax your employer deducted (APIT), from their certificate
+    other_tax_paid: Decimal = Field(default=ZERO, ge=0)  # tax you paid some other way (a payment to the IRD, say)
+    notes: str = Field(default="", max_length=500)
+
+
+def _extras_key(user_id: int, year: int) -> str:
+    return f"ird_extras:{user_id}:{year}"
+
+
+def load_extras(db: Session, user_id: int, year: int) -> Extras:
+    row = db.get(Setting, _extras_key(user_id, year))
+    if row is None or not isinstance(row.value, dict):
+        return Extras()
+    cents = Decimal("0.01")
+    return Extras(
+        employer_tax=Decimal(row.value.get("employer_tax", 0)).quantize(cents),
+        other_tax_paid=Decimal(row.value.get("other_tax_paid", 0)).quantize(cents),
+        notes=row.value.get("notes", ""),
+    )
+
+
 class IrdOut(BaseModel):
     year: int
     label: str  # "2025/26"
@@ -92,6 +116,7 @@ class IrdOut(BaseModel):
     lines: list[Line]
     uncategorised_credits: Decimal
     uncategorised_count: int
+    extras: Extras
     review_documents: int  # statements in the period still waiting for review: not in these figures
     possible_tax: Decimal  # uncategorised debits right next to an interest or dividend credit
     possible_tax_count: int
@@ -277,6 +302,7 @@ def build(db: Session, user_id: int, year: int) -> IrdOut:
         lines=[l for kind in ("employment", "interest", "dividends", "tax") for l in lines[kind]],
         uncategorised_credits=uncategorised,
         uncategorised_count=uncategorised_count,
+        extras=load_extras(db, user_id, year),
         review_documents=review,
         possible_tax=possible_tax,
         possible_tax_count=possible_tax_count,
@@ -292,6 +318,34 @@ def ird_report(
 ) -> IrdOut:
     """Income by head and tax withheld for a year of assessment (1 April to 31 March)."""
     return build(db, session.user_id, year if year is not None else ird.assessment_year(date.today()))
+
+
+@router.get("/ird/extras", response_model=Extras)
+def get_extras(
+    year: int = Query(ge=2000, le=2100),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> Extras:
+    return load_extras(db, session.user_id, year)
+
+
+@router.put("/ird/extras", response_model=Extras)
+def put_extras(
+    body: Extras,
+    year: int = Query(ge=2000, le=2100),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> Extras:
+    """Save the figures you entered for a year (amounts and a short note; nothing from a statement)."""
+    key = _extras_key(session.user_id, year)
+    value = {"employer_tax": str(body.employer_tax), "other_tax_paid": str(body.other_tax_paid), "notes": body.notes.strip()}
+    row = db.get(Setting, key)
+    if row is None:
+        db.add(Setting(key=key, value=value))
+    else:
+        row.value = value
+    db.commit()
+    return load_extras(db, session.user_id, year)
 
 
 @router.get("/ird.csv")
@@ -312,6 +366,9 @@ def ird_csv(
         out.writerow([h.label, h.amount, h.tax_withheld, h.count])
     out.writerow(["Total income recorded (not counting deposits)", report.total_income])
     out.writerow(["Other tax lines (stamp duty and so on)", report.other_tax])
+    out.writerow(["Entered by you", "Employer tax (APIT)", report.extras.employer_tax, "Other tax paid", report.extras.other_tax_paid])
+    if report.extras.notes:
+        out.writerow(["Note", _safe(report.extras.notes)])
     out.writerow([])
     out.writerow(["Month", "Employment", "Interest", "Dividends", "Other income", "Tax withheld"])
     for m in report.months:

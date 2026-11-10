@@ -140,6 +140,19 @@ answer; "null" means the model declined. The set (`app/tools/eval_set.json`) is 
 the output is safe to share. Install a model first with `docker compose exec ollama ollama pull
 qwen2.5:3b` and rebuild the backend image after changing the script.
 
+## Rules with conditions, renaming and sub-categories
+
+A rule can also be limited to **money in** or **money out** and to an **amount range** (Rules tab:
+"Money", "From amount", "Up to amount"). A row matches only when its words match and its direction
+and amount fit. Among rules of the same strength the one with more conditions wins, so a rule for
+"ACME" credits over 50,000 beats a plain "ACME" rule. The same words may have several rules with
+different conditions (`classification_rules.conditions_key`, migration 0015).
+
+Categories you made can be **renamed** and put **under a parent** ("Food and dining › Groceries")
+from the Categories tab. The pickers show the full name. The Rules tab has **Re-run rules on my
+transactions** (`POST /api/categorization/reclassify`) for after you add or switch on a rule;
+choices you set by hand and AI suggestions are left alone.
+
 ## Built-in rules
 
 `services/categorizer.py` (`CATEGORIES`, `RULES`). They hold generic wording only (ATM, SLIPS
@@ -163,8 +176,9 @@ a description with a number between the words ("CRDLESDEP 0000769618638 AECT" ma
 
 | Endpoint | Purpose |
 |---|---|
-| `GET/POST /api/categories`, `DELETE /api/categories/{id}` | list, add, delete (custom and unused only) |
-| `GET/POST /api/rules`, `PATCH/DELETE /api/rules/{id}` | list, add, turn on/off, delete (not built-in) |
+| `GET/POST /api/categories`, `DELETE /api/categories/{id}` | list, add (optionally under a parent), delete (custom, unused, without sub-categories) |
+| `PATCH /api/categories/{id}` | rename a category you made, or move it under a parent (`set_parent`, `parent_id`) or back to top level; built-in categories cannot be renamed or moved |
+| `GET/POST /api/rules`, `PATCH/DELETE /api/rules/{id}` | list, add, turn on/off, delete (not built-in). A rule may carry `direction` (`in` or `out`) and `min_amount` / `max_amount` |
 | `PUT /api/transactions/{id}/category` | set a category; `create_rule` also learns it; `preview: true` changes nothing and returns `similar_count` |
 | `GET /api/categorization/review` | the review queue; each group may carry `hint_category_id`, `hint_category_name`, `hint_confidence` |
 | `POST /api/categorization/apply` | one category for a whole description group |
@@ -188,8 +202,7 @@ Migration 0006 adds `categories`, `classification_rules`, `classification_feedba
 
 ## Limits
 
-- No sub-categories (the schema allows `parent_id`). Merchant names exist as a display layer (`08-ai-features.md`) but rules still match descriptions, not merchants.
-- Rules match descriptions only. They cannot use amounts or direction.
+- Sub-categories are one level only (a child of a top-level category of the same kind) and are a naming aid: reports and budgets still count each category on its own, with no roll-up into the parent. Merchant names exist as a display layer (`08-ai-features.md`) but rules still match descriptions, not merchants.
+- A rule needs words from the description; it can also be limited to credits or debits and to an amount range (migration 0015). It cannot match on the date or the account.
 - A transaction in an overlapping statement shares its original's category.
-- Category names are unique per user; renaming is not available yet (add a new one and move
-  transactions).
+- Category names are unique per user. You can rename the categories you made, not the built-in ones: interest, tax, salary and the IRD figures find them by name.

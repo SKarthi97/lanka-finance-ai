@@ -13,6 +13,7 @@ higher priority wins, then the longer pattern, so "INTEREST WITHHELD" (tax) beat
 """
 
 import re
+from decimal import Decimal
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from functools import lru_cache
@@ -202,6 +203,13 @@ class Rule:
     category_id: int
     origin: str
     priority: int
+    min_amount: Decimal | None = None
+    max_amount: Decimal | None = None
+    direction: str | None = None  # "in" (a credit) or "out" (a debit)
+
+    @property
+    def conditions(self) -> int:
+        return sum(x is not None for x in (self.min_amount, self.max_amount, self.direction))
 
 
 @lru_cache(maxsize=2048)
@@ -209,19 +217,28 @@ def _word_regex(pattern: str) -> re.Pattern:
     return re.compile(rf"(?<![A-Z0-9]){re.escape(pattern)}(?![A-Z0-9])")
 
 
-def rule_matches(rule: Rule, normalised: str) -> bool:
+def rule_matches(rule: Rule, normalised: str, amount: Decimal | None = None, direction: str | None = None) -> bool:
+    # A rule with conditions only applies to a row whose amount and direction are known and fit.
+    if rule.direction is not None and direction != rule.direction:
+        return False
+    if rule.min_amount is not None and (amount is None or amount < rule.min_amount):
+        return False
+    if rule.max_amount is not None and (amount is None or amount > rule.max_amount):
+        return False
     if rule.pattern_type == "word":
         return _word_regex(rule.pattern.upper()).search(normalised) is not None
     return rule.pattern.upper() in normalised
 
 
-def pick_rule(rules: list[Rule], normalised: str) -> Rule | None:
+def pick_rule(
+    rules: list[Rule], normalised: str, amount: Decimal | None = None, direction: str | None = None
+) -> Rule | None:
     """`rules` must be sorted strongest first (see load_rules)."""
     stem = None
     for rule in rules:
-        if rule_matches(rule, normalised):
+        if rule_matches(rule, normalised, amount, direction):
             return rule
-        if rule.origin == "correction":
+        if rule.origin == "correction" and rule.conditions == 0:
             # A correction is saved under the stem, which skips number words: the stem "CRDLESDEP AECT"
             # is not a substring of "CRDLESDEP 0000769618638 AECT", yet it is the same description.
             if stem is None:
@@ -238,10 +255,14 @@ def load_rules(db: Session, user_id: int) -> list[Rule]:
         )
     ).all()
     rules = [
-        Rule(r.id, r.pattern.upper(), r.pattern_type, r.category_id, r.origin, r.priority)
+        Rule(
+            r.id, r.pattern.upper(), r.pattern_type, r.category_id, r.origin, r.priority,
+            r.min_amount, r.max_amount, r.direction,
+        )
         for r in rows
     ]
-    rules.sort(key=lambda r: (-r.priority, -len(r.pattern), r.id))
+    # strongest first; among equals the longer pattern, then the one with more conditions
+    rules.sort(key=lambda r: (-r.priority, -len(r.pattern), -r.conditions, r.id))
     return rules
 
 
@@ -321,6 +342,8 @@ def classify_rows(
         Transaction.category_id,
         Transaction.classification_source,
         Transaction.classification_explanation,
+        Transaction.debit,
+        Transaction.credit,
     ).where(Transaction.user_id == user_id)
     if document_id is not None:
         query = query.where(Transaction.document_id == document_id)
@@ -332,7 +355,13 @@ def classify_rows(
     updates: list[dict] = []
     applied: Counter = Counter()
     for row in db.execute(query):
-        rule = pick_rule(rules, normalise(row.original_description))
+        out = Decimal(row.debit) > 0
+        rule = pick_rule(
+            rules,
+            normalise(row.original_description),
+            Decimal(row.debit) if out else Decimal(row.credit),
+            "out" if out else "in",
+        )
         if rule:
             source = "rule" if rule.origin == "system" else "user_rule"
             explanation = f"Rule: {rule.pattern_type} '{rule.pattern}'"[:200]
@@ -398,6 +427,7 @@ def upsert_correction_rule(db: Session, user_id: int, stem: str, category_id: in
             ClassificationRule.user_id == user_id,
             ClassificationRule.pattern_type == "contains",
             ClassificationRule.pattern == stem,
+            ClassificationRule.conditions_key == "",
         )
     )
     if rule is None:

@@ -1,0 +1,14 @@
+# Offline override: the backend, worker, database and Ollama get no route to the internet.
+#   docker compose -f docker-compose.yml -f docker-compose.offline.yml up -d
+#
+# The app never calls an outside service, so nothing is lost, but the models must already be
+# downloaded (run `docker compose --profile setup run --rm ollama-pull` and, for similarity hints,
+# `docker compose exec ollama ollama pull nomic-embed-text` once, BEFORE switching this on).
+# The frontend stays on the `edge` network only because Docker cannot publish a port from an
+# internal-only network; it makes no outside requests.
+#
+# To check it, ask the backend container to open any outside web address: it should fail.
+
+networks:
+  internal:
+    internal: true

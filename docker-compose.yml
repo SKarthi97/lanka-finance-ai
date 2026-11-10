@@ -127,6 +127,13 @@ services:
     security_opt: ["no-new-privileges:true"]
     stop_grace_period: 30s
     restart: unless-stopped
+    # Alive while the worker keeps touching its heartbeat file (see app/worker.py).
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/worker-heartbeat')<60 else 1)"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
 
   frontend:
     build:
@@ -145,6 +152,12 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
 networks:
   edge: {}

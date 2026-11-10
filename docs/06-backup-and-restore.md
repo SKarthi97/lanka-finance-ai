@@ -41,6 +41,19 @@ schtasks /Create /SC DAILY /ST 21:00 /TN "Lanka Finance backup" /TR "powershell 
 
 Remove it with `schtasks /Delete /TN "Lanka Finance backup" /F`.
 
+## Prove it works: the restore drill
+
+```
+.\scripts\restore-drill.ps1
+```
+
+Starts a separate copy of the app (project `lanka-drill`, its own database volume, port 3200),
+restores the newest backup into it, lets the app apply its migrations, checks the backend becomes
+healthy and that the counts did not change, and then removes the copy. Your running app and its
+database are not touched. `-File` picks a specific dump, `-Keep` leaves the copy running so you can
+look at it (remove it with `docker compose -p lanka-drill down -v`). Run it after your first backup
+and now and then afterwards; `backup.ps1 -Verify` only checks that the dump reads back.
+
 ## Restore
 
 ```

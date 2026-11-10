@@ -103,3 +103,28 @@ def test_new_builtin_rules_reach_rows_you_already_have(logged_in, session_factor
         db.commit()
         db.refresh(row)
         assert row.category_id is not None  # the cash-withdrawal rule applied on the version bump
+
+
+def test_tax_paid_outside_the_bank_is_kept_per_year(logged_in):
+    client, csrf = logged_in
+    headers = {"X-CSRF-Token": csrf}
+    assert client.get("/api/reports/ird/extras?year=2025").json() == {"employer_tax": "0.00", "other_tax_paid": "0.00", "notes": ""}
+    saved = client.put(
+        "/api/reports/ird/extras?year=2025",
+        json={"employer_tax": "120000.50", "other_tax_paid": "5000", "notes": "from the T10 certificate"},
+        headers=headers,
+    )
+    assert saved.status_code == 200 and saved.json()["employer_tax"] == "120000.50"
+    assert client.get("/api/reports/ird/extras?year=2024").json()["employer_tax"] == "0.00"  # another year is separate
+    report = client.get("/api/reports/ird?year=2025").json()
+    assert report["extras"]["notes"] == "from the T10 certificate"
+    assert "120000.50" in client.get("/api/reports/ird.csv?year=2025").text
+    # changing it again replaces it
+    client.put("/api/reports/ird/extras?year=2025", json={"employer_tax": "1"}, headers=headers)
+    assert client.get("/api/reports/ird/extras?year=2025").json()["employer_tax"] == "1.00"
+
+
+def test_negative_amounts_are_refused(logged_in):
+    client, csrf = logged_in
+    r = client.put("/api/reports/ird/extras?year=2025", json={"employer_tax": "-5"}, headers={"X-CSRF-Token": csrf})
+    assert r.status_code in (400, 422)

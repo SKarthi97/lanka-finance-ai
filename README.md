@@ -49,6 +49,8 @@ cd ../frontend
 node_modules/.bin/tsc --noEmit           # type check
 ```
 
+Lint, browser tests and CI are in `docs/09-development.md`.
+
 ## Privacy rules for development
 
 Real statements live only in `sample_pdfs/` or `tests/fixtures/private/` (gitignored, never
@@ -69,5 +71,6 @@ codes and counts, never descriptions or amounts.
 | `docs/06-backup-and-restore.md` | Backup and restore scripts, scheduling, encryption, what survives re-extraction |
 | `docs/07-budgets-recurring-reports.md` | Budgets, recurring payments, saved filters, and the Reports page (monthly, growth and interest, IRD) |
 | `docs/08-ai-features.md` | Merchant names, search in plain words, progress and AI activity, similarity hints, month in words, flag explanations |
-| `docs/windows-setup.md` | Windows, WSL2 and Docker setup |
+| `docs/09-development.md` | Tests, lint, browser tests, CI |
+| `docs/windows-setup.md` | Windows, WSL2 and Docker setup, GPU and offline overrides |
 | `docs/licenses.md` | Third-party and model licences |

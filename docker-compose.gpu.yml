@@ -1,0 +1,16 @@
+# GPU override: lets Ollama use an NVIDIA GPU (Docker Desktop with the WSL2 backend and a current
+# NVIDIA driver; no extra toolkit is needed on Windows).
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+#
+# Check it: `docker compose exec ollama nvidia-smi` lists the card, and the System page's
+# warm-up time should drop sharply. Remove the override to go back to the CPU.
+
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

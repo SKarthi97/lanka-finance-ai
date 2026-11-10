@@ -1,23 +1,16 @@
-from collections import defaultdict
-from datetime import timedelta
+from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import get_current_session
-from app.models import Bank, Category, Document, Transaction, UserSession
-from app.services import interest
-from app.services.extraction import ACTIVE_STATUSES
+from app.models import UserSession
+from app.services import interest, savings
 
 router = APIRouter(prefix="/api/savings", tags=["savings"])
-
-INTEREST_CATEGORY = "Interest income"
-TAX_CATEGORY = "Tax"
-TAX_WORDS = ("INTEREST", "WHT", "WITHHELD")
 
 
 class InterestMonth(BaseModel):
@@ -48,66 +41,8 @@ def interest_by_month(
 ) -> InterestOut:
     """The interest credited each month and the annual rate it works out to, from the days your
     money was kept. Interest credited in a month pays for the days before it (see services/interest)."""
-    included = select(Document.id).where(
-        Document.user_id == session.user_id, Document.status.in_(ACTIVE_STATUSES)
-    )
-    where = [Transaction.document_id.in_(included), Transaction.is_duplicate.is_(False)]
-    if bank_code:
-        bank = db.scalar(select(Bank).where(Bank.code == bank_code))
-        where.append(Transaction.bank_id == (bank.id if bank else -1))
-
-    rows = db.execute(
-        select(
-            Transaction.bank_id,
-            Transaction.account_id,
-            Transaction.transaction_date,
-            Transaction.running_balance,
-            Transaction.credit,
-            Transaction.debit,
-            Transaction.original_description,
-            Category.name,
-        )
-        .outerjoin(Category, Transaction.category_id == Category.id)
-        .where(*where)
-        .order_by(Transaction.transaction_date, Transaction.document_id, Transaction.seq)
-    ).all()
-
-    accounts: dict[tuple, interest.Account] = defaultdict(interest.Account)
-    key_of: dict[int, tuple] = {}
-    unrecognised = 0
-    for bank_id, account_id, when, balance, credit, debit, description, category in rows:
-        key = (bank_id, account_id)
-        account = accounts[key]
-        if account_id is not None:
-            key_of[account_id] = key
-        # rows arrive in order, so the last row of a day sets that day's closing balance
-        if account.points and account.points[-1][0] == when:
-            account.points[-1] = (when, Decimal(balance))
-        else:
-            account.points.append((when, Decimal(balance)))
-        if category == INTEREST_CATEGORY and Decimal(credit) > 0:
-            account.credits.append((when, Decimal(credit)))
-        elif category == TAX_CATEGORY and Decimal(debit) > 0 and any(w in description.upper() for w in TAX_WORDS):
-            account.taxes.append((when, Decimal(debit)))
-        elif Decimal(credit) > 0 and "INTEREST" in description.upper() and when.year == year:
-            unrecognised += 1
-
-    # A statement's opening balance is the balance at the end of the day before it starts, so it
-    # lets the first days of an account's data count even before its first row.
-    for first_day, opening, account_id in db.execute(
-        select(Document.period_start, Document.opening_balance, Document.account_id).where(
-            Document.id.in_(included), Document.period_start.is_not(None), Document.opening_balance.is_not(None)
-        )
-    ):
-        key = key_of.get(account_id)
-        if key is not None:
-            before = first_day - timedelta(days=1)
-            if all(day != before for day, _ in accounts[key].points):
-                accounts[key].points.append((before, Decimal(opening)))
-    for account in accounts.values():
-        account.points.sort(key=lambda p: p[0])
-
-    paying = [a for a in accounts.values() if a.credits]
+    infos, unrecognised = savings.load_accounts(db, session.user_id, bank_code, year)
+    paying = [i.data for i in infos if i.data.credits]
     months = interest.monthly_rates(paying, year)
     return InterestOut(
         year=year,
@@ -127,4 +62,92 @@ def interest_by_month(
             )
             for m in months
         ],
+    )
+
+
+# --- insights ----------------------------------------------------------------------------------
+
+
+class BankRateOut(BaseModel):
+    bank_code: str | None
+    bank_name: str | None
+    accounts: int
+    interest: Decimal
+    average_balance: Decimal
+    annual_rate: Decimal
+
+
+class RateDropOut(BaseModel):
+    bank_code: str | None
+    bank_name: str | None
+    previous_rate: Decimal
+    latest_rate: Decimal
+    since: date
+
+
+class IdleOut(BaseModel):
+    bank_code: str | None
+    bank_name: str | None
+    last4: str | None
+    average_balance: Decimal
+    could_earn_a_year: Decimal | None
+    best_rate: Decimal | None
+
+
+class ProjectionPoint(BaseModel):
+    day: date
+    balance: Decimal
+
+
+class ProjectionOut(BaseModel):
+    current_balance: Decimal
+    monthly_change: Decimal
+    months_used: int
+    points: list[ProjectionPoint]
+    months_to_goal: int | None
+    goal_reached: bool
+
+
+class InsightsOut(BaseModel):
+    as_of: date | None
+    banks: list[BankRateOut]
+    best_rate: Decimal | None
+    drops: list[RateDropOut]
+    idle: list[IdleOut]
+    projection: ProjectionOut | None
+
+
+@router.get("/insights", response_model=InsightsOut)
+def insights(
+    goal: Decimal | None = Query(default=None, gt=0),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> InsightsOut:
+    """What each bank pays you, a rate that is falling, money that may be idle and where the balance
+    is heading. All of it is worked out from the statements (services/savings)."""
+    infos, _ = savings.load_accounts(db, session.user_id)
+    today = savings.as_of(infos)
+    if today is None:
+        return InsightsOut(as_of=None, banks=[], best_rate=None, drops=[], idle=[], projection=None)
+    banks = savings.bank_rates(infos, today)
+    best = banks[0].annual_rate if banks else None
+    plan = savings.projection(infos, today, goal)
+    return InsightsOut(
+        as_of=today,
+        banks=[BankRateOut(**vars(b)) for b in banks],
+        best_rate=best,
+        drops=[RateDropOut(**vars(d)) for d in savings.rate_drops(infos)],
+        idle=[IdleOut(**vars(i)) for i in savings.idle_accounts(infos, today, best)],
+        projection=(
+            ProjectionOut(
+                current_balance=plan.current_balance,
+                monthly_change=plan.monthly_change,
+                months_used=plan.months_used,
+                points=[ProjectionPoint(day=d, balance=b) for d, b in plan.points],
+                months_to_goal=plan.months_to_goal,
+                goal_reached=plan.goal_reached,
+            )
+            if plan
+            else None
+        ),
     )

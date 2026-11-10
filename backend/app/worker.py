@@ -7,7 +7,9 @@ import logging
 import os
 import signal
 import socket
+import threading
 import time
+from pathlib import Path
 from collections.abc import Callable
 
 from sqlalchemy.orm import Session, sessionmaker
@@ -33,6 +35,30 @@ HANDLERS: dict[str, Handler] = {
     CLASSIFY_JOB: run_classify_job,
     NAMING_JOB: run_naming_job,
 }
+
+# The container's health check reads this file's age: the process is alive while it keeps being touched.
+# A separate thread does it so a long job (a slow model call) does not look like a dead worker.
+HEARTBEAT_FILE = Path(os.environ.get("WORKER_HEARTBEAT", "/tmp/worker-heartbeat"))
+HEARTBEAT_EVERY_S = 10
+
+
+def beat(path: Path = HEARTBEAT_FILE) -> None:
+    try:
+        path.touch()
+    except OSError:  # a read-only or missing folder must never stop the worker
+        pass
+
+
+def start_heartbeat(stop: threading.Event, path: Path = HEARTBEAT_FILE, every: float = HEARTBEAT_EVERY_S) -> threading.Thread:
+    def run() -> None:
+        while not stop.is_set():
+            beat(path)
+            stop.wait(every)
+
+    thread = threading.Thread(target=run, name="heartbeat", daemon=True)
+    thread.start()
+    return thread
+
 
 # Only these jobs decide a statement's status. A failed AI pass must never fail a statement.
 STATEMENT_JOBS = {"inspect_document", "extract_transactions"}
@@ -83,10 +109,13 @@ def main() -> None:
     worker_id = f"{socket.gethostname()}:{os.getpid()}"
 
     stopping = False
+    stop_event = threading.Event()
+    start_heartbeat(stop_event)
 
     def request_stop(signum, frame):  # noqa: ARG001
         nonlocal stopping
         stopping = True
+        stop_event.set()
 
     signal.signal(signal.SIGTERM, request_stop)
     signal.signal(signal.SIGINT, request_stop)

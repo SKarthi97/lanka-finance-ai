@@ -6,7 +6,6 @@ import httpx
 import pytest
 from sqlalchemy import select
 
-from app.job_queue import enqueue
 from app.models import Document, Job, ModelRun, Transaction
 from app.services.llm_classifier import (
     JOB_TYPE,

@@ -11,7 +11,7 @@ from datetime import date
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import Document
+from app.models import Category, Document, Transaction
 from app.services import transfers
 from app.services.coverage import account_coverage
 from app.services.extraction import ACTIVE_STATUSES
@@ -140,4 +140,31 @@ def collect(db: Session, user_id: int, today: date | None = None) -> list[Notice
                 href="/categories?tab=transfers",
             )
         )
+
+    # An interest rate that fell: worked out only when some interest was ever credited (cheap check first).
+    has_interest = db.scalar(
+        select(func.count())
+        .select_from(Transaction)
+        .join(Category, Transaction.category_id == Category.id)
+        .where(Transaction.user_id == user_id, Category.name == "Interest income", Transaction.credit > 0)
+        .limit(1)
+    )
+    if has_interest:
+        from app.services import savings  # late: it reads every row of the user's accounts
+
+        infos, _ = savings.load_accounts(db, user_id)
+        for drop in savings.rate_drops(infos):
+            notices.append(
+                Notice(
+                    key=f"rate:{drop.bank_code}",
+                    kind="rate",
+                    severity="info",
+                    text=(
+                        f"{drop.bank_name or 'A bank'}: the interest you are getting fell from about "
+                        f"{drop.previous_rate}% to {drop.latest_rate}% a year (credit on "
+                        f"{drop.since.day} {MONTHS[drop.since.month - 1]} {drop.since.year})."
+                    ),
+                    href="/savings",
+                )
+            )
     return notices

@@ -57,3 +57,7 @@ node_modules/
 .next/
 next-env.d.ts
 *.tsbuildinfo
+
+# Browser tests
+frontend/playwright-report/
+frontend/test-results/

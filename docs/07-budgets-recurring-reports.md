@@ -75,3 +75,26 @@ The page `/reports` (menu: Reports) has three tabs.
   uncategorised credits, because each makes the figures incomplete. It sorts what the statements show;
   it does not compute tax (rates and reliefs change, and employer-deducted tax and interest credited
   after tax are not on a statement), and the page says so.
+
+## Savings page (`/savings`, `services/savings.py`, `GET /api/savings/insights`)
+
+Four things, all arithmetic on the statements (no model):
+
+* **What each bank pays you**: the rate over the last 12 months per bank, worked out like the Growth
+  tab (interest / balance-days x 365), with the interest, the average balance and the best bank.
+* **A falling rate**: the rate on a bank's latest interest credit against the average of up to three
+  before it; a fall of half a percentage point or more is shown here and in the bell
+  (`services/notifications.py`, kind `rate`). It needs at least three credits to judge.
+* **Money that may be idle**: an account with an average balance of 25,000 or more over the last
+  90 days and no interest credit in the last 180, with what that balance would earn a year at your
+  best rate. Accounts whose statements stopped more than 60 days before the latest data are skipped.
+  A current account may pay no interest by design; this is a pointer, not advice.
+* **Where the balance is heading**: the average monthly change of your total balance over up to six
+  months, continued in a straight line for twelve months, with an optional goal ("you would reach it
+  in about N months"). The goal is kept in the browser only. It is not a forecast.
+
+## IRD: figures you enter
+
+The IRD tab also has "Tax paid outside the bank": the employer's tax (APIT) and other tax paid, with
+a note, kept per year of assessment (`GET/PUT /api/reports/ird/extras?year=`, stored in `settings`).
+They are shown on the page and in the CSV, and are not mixed into the figures read from statements.

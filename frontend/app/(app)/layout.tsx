@@ -24,6 +24,7 @@ const NAV: { heading: string; items: { href: string; label: string; icon: string
       { href: "/transactions", label: "Transactions", icon: "🧾" },
       { href: "/upload", label: "Upload", icon: "📥" },
       { href: "/reports", label: "Reports", icon: "📄" },
+      { href: "/savings", label: "Savings", icon: "🏦" },
     ],
   },
   {

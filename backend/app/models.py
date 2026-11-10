@@ -296,7 +296,7 @@ class Category(Base):
 class ClassificationRule(Base):
     __tablename__ = "classification_rules"
     __table_args__ = (
-        UniqueConstraint("user_id", "pattern_type", "pattern", name="uq_rules_pattern"),
+        UniqueConstraint("user_id", "pattern_type", "pattern", "conditions_key", name="uq_rules_pattern"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -306,6 +306,12 @@ class ClassificationRule(Base):
     # contains: pattern appears anywhere. word: pattern appears as a whole word.
     pattern_type: Mapped[str] = mapped_column(String(16), default="contains")
     pattern: Mapped[str] = mapped_column(String(128))
+    # Optional conditions on the amount and direction ("in" = a credit, "out" = a debit). Empty = no condition.
+    min_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    max_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    direction: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    # direction|min|max as text, so the same words with different conditions are different rules
+    conditions_key: Mapped[str] = mapped_column(String(48), default="", server_default="")
     category_id: Mapped[int] = mapped_column(
         ForeignKey("categories.id", ondelete="CASCADE")
     )
