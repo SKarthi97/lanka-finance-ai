@@ -134,6 +134,7 @@ cannot be read stops the backend at start-up with its name. Examples:
 | `TUNE_TAX_WINDOW_DAYS` | 3 | days after a credit that withheld tax is looked for (interest rate) |
 | `TUNE_MIN_ASSUMED_DAYS`, `TUNE_MIN_SAME_MONTH_DAYS` | 25, 20 | data needed to rate a first interest credit |
 | `TUNE_NEAR_BEFORE_DAYS`, `TUNE_NEAR_AFTER_DAYS` | 1, 3 | where an IRD tax line may sit around its credit |
+| `TUNE_BACKUP_STALE_DAYS` | 7 | age of a backup before it is flagged (System page, bell) |
 | `TUNE_STALE_DAYS` | 45 | age of a statement before an account is "out of date" |
 | `TUNE_RECURRING_AMOUNT_TOLERANCE`, `TUNE_RECURRING_SHARE` | 0.20, 0.75 | what counts as a recurring payment |
 | `TUNE_TRANSFER_WINDOW_DAYS` | 3 | days apart for the two legs of a transfer |

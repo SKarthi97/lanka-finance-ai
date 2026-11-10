@@ -179,6 +179,7 @@ export default function UploadPage() {
 
       <form onSubmit={onSubmit} className="space-y-4 rounded border border-slate-200 bg-surface p-4">
         <div
+          role="presentation" // a drop target for the mouse; the file picker inside it is the keyboard way
           onDragOver={(e) => {
             e.preventDefault();
             setDragging(true);

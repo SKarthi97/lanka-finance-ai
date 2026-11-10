@@ -133,5 +133,17 @@ foreach ($file in $old) {
 
 $size = [math]::Round((Get-Item $target).Length / 1KB)
 Write-Host "Backup written: $target ($size KB)"
+
+# Tell the app a backup was made (a time, a size and two flags; nothing about the contents), so its
+# System page and notification bell can say how fresh your backup is. A failure here is not a failed backup.
+try {
+  $stampUtc = (Get-Date).ToUniversalTime().ToString("o")
+  $enc = if ($Encrypt) { "true" } else { "false" }
+  $ver = if ($Verify) { "true" } else { "false" }
+  $record = "INSERT INTO settings (key, value) VALUES ('last_backup', '{`"at`": `"$stampUtc`", `"size_kb`": $size, `"encrypted`": $enc, `"verified`": $ver}') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;"
+  $record | docker compose exec -T postgres psql -U lanka -d lanka -v ON_ERROR_STOP=1 -q | Out-Null
+  if ($LASTEXITCODE -ne 0) { Write-Warning "The backup is fine, but the app could not be told about it." }
+}
+catch { Write-Warning "The backup is fine, but the app could not be told about it." }
 if ($Encrypt) { Write-Host "The backup is encrypted. Keep the passphrase safe: without it the file cannot be opened." }
 else { Write-Host "Keep this folder on an encrypted drive (or use -Encrypt). It is never committed to git." }

@@ -33,3 +33,10 @@ input::placeholder {
   scrollbar-width: thin;
   scrollbar-color: #434859 transparent;
 }
+
+/* A scrolling box must also clip the visually hidden text (sr-only) inside it: that text is
+   absolutely positioned, and without a positioned scroll box it escapes and makes the whole page
+   scroll sideways on a phone. */
+.overflow-x-auto {
+  position: relative;
+}

@@ -44,6 +44,8 @@ both files afterwards. CI also uses `npm ci`, so its lint step works only after 
   tidy comprehensions and redundant code (`backend/ruff.toml`).
 * **Guards** (`backend/tests/test_guards.py`): no SQL built from strings, a search's `%` and `_` are plain
   characters, and no network code outside the local-model modules.
+* **Small screens**: part of the browser tests (see `05-user-interface.md`).
+* **Accessibility lint**: the `jsx-a11y` rules in `frontend/eslint.config.mjs` (autoFocus is allowed: dialogs and inline editors should take focus).
 * **Offline proof**: `scripts/check-offline.ps1` (see `windows-setup.md`).
 
 ## Browser smoke tests (Playwright)

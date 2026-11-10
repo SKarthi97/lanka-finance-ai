@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -59,7 +60,11 @@ class Settings(BaseSettings):
     # Similarity hints (docs/08, 4.3): suggest a category from descriptions you already
     # categorised, using a small local embedding model. OFF until you have measured it on your own
     # data: pull the model, run `python -m app.tools.eval_embeddings`, then set EMBED_SUGGEST_ENABLED.
-    embed_enabled: bool = False
+    # The documented name is EMBED_SUGGEST_ENABLED (docker-compose.yml passes it); EMBED_ENABLED also works.
+    embed_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("EMBED_SUGGEST_ENABLED", "EMBED_ENABLED", "embed_enabled"),
+    )
     ollama_embed_model: str = "nomic-embed-text"
     # nomic-embed-text expects a task word before each text ("classification: ..."). Without it
     # unrelated short strings score close together. Empty: send the text as it is.

@@ -55,7 +55,8 @@ MIN_SAME_MONTH_DAYS = _int("MIN_SAME_MONTH_DAYS", 20)  # ...or this many when it
 NEAR_BEFORE_DAYS = _int("NEAR_BEFORE_DAYS", 1)  # a tax line may sit this many days before its credit...
 NEAR_AFTER_DAYS = _int("NEAR_AFTER_DAYS", 3)  # ...or up to this many days after
 
-# --- statements ---
+# --- statements and backups ---
+BACKUP_STALE_DAYS = _int("BACKUP_STALE_DAYS", 7)  # a backup older than this is flagged (bell and System page)
 STALE_DAYS = _int("STALE_DAYS", 45)  # an account whose latest statement is older is "out of date"
 
 # --- recurring payments ---

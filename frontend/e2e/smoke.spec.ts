@@ -68,8 +68,41 @@ test("a category can be added and renamed", async () => {
   await page.getByLabel(/New name for/).fill("E2E pet care");
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByText(/Renamed/)).toBeVisible();
-  await expect(page.getByText("E2E pet care")).toBeVisible();
+  await expect(page.getByRole("cell", { name: "E2E pet care", exact: true })).toBeVisible();
 });
+
+// Small screens: no page may scroll sideways as a whole (a wide table scrolling inside its own box is fine).
+// Screenshots land in test-results/responsive/ so the layouts can be looked at.
+const SCREENS = [
+  { name: "phone", width: 390, height: 844 },
+  { name: "tablet", width: 820, height: 1180 },
+];
+const PAGES = ["/", "/transactions", "/upload", "/reports", "/savings", "/categories", "/budgets", "/recurring", "/system", "/settings"];
+
+for (const screen of SCREENS) {
+  test(`no page scrolls sideways on a ${screen.name}`, async () => {
+    await page.setViewportSize({ width: screen.width, height: screen.height });
+    const wide: string[] = [];
+    for (const url of PAGES) {
+      await page.goto(url);
+      await page.waitForLoadState("networkidle");
+      const extra = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      await page.screenshot({ path: `test-results/responsive/${screen.name}${url === "/" ? "-dashboard" : url.replace(/\//g, "-")}.png`, fullPage: true });
+      if (extra > 1) {
+        // name the widest culprits so the fix is obvious
+        const culprits = await page.evaluate(() =>
+          [...document.querySelectorAll("body *")]
+            .filter((el) => el.getBoundingClientRect().right > window.innerWidth + 1 && !el.parentElement?.closest(".overflow-x-auto"))
+            .slice(0, 4)
+            .map((el) => `${el.tagName.toLowerCase()}.${String(el.className).slice(0, 60)}`),
+        );
+        wide.push(`${url} (+${extra}px) ${culprits.join(" | ")}`);
+      }
+    }
+    await page.setViewportSize({ width: 1280, height: 720 });
+    expect(wide, `pages wider than the ${screen.name} screen`).toEqual([]);
+  });
+}
 
 test("signing out returns to the sign-in page", async () => {
   await page.getByRole("button", { name: /sign out/i }).click();

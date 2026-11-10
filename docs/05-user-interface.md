@@ -148,3 +148,20 @@ error states share `components/states.tsx`; dialogs share `components/ConfirmDia
   names one, and says the filters it used.
 * **Transaction side panel, History**: where the row was read from (statement or import), every category you
   changed, merchant names you set or cleared, and its category now with the reason.
+
+## Getting started, shortcuts, small screens, accessibility
+
+* **Getting started** (dashboard, once a first statement is in): a five-step checklist (statement in, every statement
+  reconciled, transactions categorised, a budget set, a backup made). Each step ticks itself from the data; "Hide
+  this" dismisses it for good (remembered in this browser), and it disappears when everything is done.
+* **Keyboard on Transactions**: `/` search, `j` / `k` next / previous row, `x` select the row, `Enter` open its
+  details, `Esc` clear, `?` show the list. They are off while typing in a box. Selected rows can be given a category
+  together with the bar that appears above the table.
+* **System page**: "Storage and backup" shows sizes and the last backup.
+* **Small screens**: the browser tests open every page at phone (390 px) and tablet (820 px) widths and fail if
+  any page scrolls sideways as a whole; screenshots go to `frontend/test-results/responsive/`. Wide tables scroll
+  inside their own box.
+* **Accessibility**: text colours are checked for contrast on every dark surface (muted text is at least 4.5:1,
+  the orange accent carries dark text, never white); the focus ring is always visible; there is a skip-to-content
+  link; budget bars are progress bars for screen readers; ESLint's accessibility rules (labels, roles, key handlers)
+  run with the rest of the lint.

@@ -45,6 +45,8 @@ export default function TransactionsPage() {
   const [bulkCategory, setBulkCategory] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [detail, setDetail] = useState<TransactionItem | null>(null);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [activeId, setActiveId] = useState<number | null>(null); // the row the keyboard is on
 
   const [banks, setBanks] = useState<Bank[]>([]);
   const [years, setYears] = useState<number[]>([]);
@@ -193,6 +195,39 @@ export default function TransactionsPage() {
 
   const rows = data?.items ?? [];
   const allSelected = rows.length > 0 && rows.every((t) => selected.has(t.id));
+
+  // Keyboard: / search, j and k move, x selects, Enter opens, Escape clears. Ignored while typing in a
+  // field, with a modifier held, or while the details panel is open.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      if (e.ctrlKey || e.metaKey || e.altKey || detail) return;
+      // Text boxes and menus keep their own keys; so does Enter on a focused button or link.
+      if (target?.closest('input:not([type="checkbox"]):not([type="radio"]), select, textarea, [contenteditable=true]')) return;
+      if ((e.key === "Enter" || e.key === " ") && target?.closest("button, a")) return;
+      const items = data?.items ?? [];
+      const at = items.findIndex((t) => t.id === activeId);
+      const move = (to: number) => {
+        const row = items[Math.min(Math.max(to, 0), items.length - 1)];
+        if (!row) return;
+        setActiveId(row.id);
+        requestAnimationFrame(() => document.querySelector(`[data-row-id="${row.id}"]`)?.scrollIntoView({ block: "nearest" }));
+      };
+      if (e.key === "/") {
+        e.preventDefault();
+        document.querySelector<HTMLInputElement>('input[aria-label="Search descriptions"]')?.focus();
+      } else if (e.key === "j") move(at + 1);
+      else if (e.key === "k") move(at < 0 ? 0 : at - 1);
+      else if (e.key === "x" && at >= 0) toggleRow(items[at].id);
+      else if ((e.key === "Enter" || e.key === "o") && at >= 0) setDetail(items[at]);
+      else if (e.key === "Escape") {
+        setActiveId(null);
+        setSelected(new Set());
+      } else if (e.key === "?") setShortcutsOpen((open) => !open);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   function toggleRow(id: number) {
     const next = new Set(selected);
@@ -409,6 +444,18 @@ export default function TransactionsPage() {
         }}
       />
 
+      <div className="text-xs text-slate-500">
+        <button type="button" onClick={() => setShortcutsOpen((open) => !open)} aria-expanded={shortcutsOpen} className="underline">
+          Keyboard shortcuts (?)
+        </button>
+        {shortcutsOpen && (
+          <p className="mt-1">
+            <kbd>/</kbd> search · <kbd>j</kbd> / <kbd>k</kbd> next / previous row · <kbd>x</kbd> select the row · <kbd>Enter</kbd> open its details ·{" "}
+            <kbd>Esc</kbd> clear the selection · <kbd>?</kbd> show or hide this. They are off while you type in a box.
+          </p>
+        )}
+      </div>
+
       <SavedViews current={currentFilters} hasFilters={chips.length > 0} onApply={applyView} />
 
       {chips.length > 0 && (
@@ -557,7 +604,9 @@ export default function TransactionsPage() {
                   </tr>
                 )}
                 <tr
-                  className={`border-b border-slate-100 last:border-0 hover:bg-slate-50 ${
+                  data-row-id={t.id}
+                  aria-current={activeId === t.id ? "true" : undefined}
+                  className={`border-b border-slate-100 last:border-0 hover:bg-slate-50 ${activeId === t.id ? "outline outline-2 -outline-offset-2 outline-accent " : ""}${
                     t.validation_status !== "ok" ? "bg-amber-50" : selected.has(t.id) ? "" : "even:bg-white/[0.02]"
                   } ${t.is_duplicate ? "text-slate-400" : ""} ${selected.has(t.id) ? "bg-accent/10" : ""}`}
                 >

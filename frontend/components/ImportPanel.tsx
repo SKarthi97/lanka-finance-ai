@@ -117,7 +117,7 @@ export function ImportPanel({ onDone }: { onDone: () => void }) {
               key={m}
               type="button"
               onClick={() => setMode(m)}
-              className={`rounded px-3 py-1.5 ${mode === m ? "bg-accent text-white" : "border border-slate-300"}`}
+              className={`rounded px-3 py-1.5 ${mode === m ? "bg-accent text-accent-fg" : "border border-slate-300"}`}
             >
               {m === "csv" ? "CSV file" : "Type the rows"}
             </button>
@@ -178,7 +178,7 @@ export function ImportPanel({ onDone }: { onDone: () => void }) {
           </div>
         )}
 
-        <button type="submit" disabled={busy} className="rounded bg-accent px-4 py-2 text-sm text-white disabled:opacity-50">
+        <button type="submit" disabled={busy} className="rounded bg-accent px-4 py-2 text-sm text-accent-fg disabled:opacity-50">
           {busy ? "Importing…" : "Import"}
         </button>
         {message && (

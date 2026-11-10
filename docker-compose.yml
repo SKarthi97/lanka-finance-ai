@@ -21,6 +21,7 @@ x-tuning: &tuning
   TUNE_NEAR_BEFORE_DAYS: ${TUNE_NEAR_BEFORE_DAYS:-}
   TUNE_NEAR_AFTER_DAYS: ${TUNE_NEAR_AFTER_DAYS:-}
   TUNE_STALE_DAYS: ${TUNE_STALE_DAYS:-}
+  TUNE_BACKUP_STALE_DAYS: ${TUNE_BACKUP_STALE_DAYS:-}
   TUNE_RECURRING_AMOUNT_TOLERANCE: ${TUNE_RECURRING_AMOUNT_TOLERANCE:-}
   TUNE_RECURRING_SHARE: ${TUNE_RECURRING_SHARE:-}
   TUNE_TRANSFER_WINDOW_DAYS: ${TUNE_TRANSFER_WINDOW_DAYS:-}
@@ -29,8 +30,16 @@ x-tuning: &tuning
   TUNE_FLAG_MIN_PAYMENTS_FOR_NEW_PAYEE: ${TUNE_FLAG_MIN_PAYMENTS_FOR_NEW_PAYEE:-}
   TUNE_FLAG_NEW_PAYEE_TIMES: ${TUNE_FLAG_NEW_PAYEE_TIMES:-}
 
+# Log files are capped, so they cannot slowly fill the disk (3 files of up to 10 MB per service).
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   postgres:
+    logging: *logging
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: lanka
@@ -49,6 +58,7 @@ services:
       retries: 10
 
   ollama:
+    logging: *logging
     image: ollama/ollama:latest
     volumes:
       - ollama_models:/root/.ollama
@@ -65,6 +75,7 @@ services:
   # One-shot job: asks the ollama server to download the configured model, then exits.
   # Run on demand: docker compose --profile setup run --rm ollama-pull
   ollama-pull:
+    logging: *logging
     image: ollama/ollama:latest
     profiles: ["setup"]
     depends_on:
@@ -77,6 +88,7 @@ services:
     restart: "no"
 
   backend:
+    logging: *logging
     build: ./backend
     environment:
       <<: *tuning
@@ -98,6 +110,11 @@ services:
       MAX_PAGES: ${MAX_PAGES:-300}
       RETAIN_DOCUMENTS: ${RETAIN_DOCUMENTS:-false}
       LLM_CLASSIFY_ENABLED: ${LLM_CLASSIFY_ENABLED:-true}
+      LLM_HINT_THRESHOLD: ${LLM_HINT_THRESHOLD:-0.4}
+      LLM_CONFIDENT_THRESHOLD: ${LLM_CONFIDENT_THRESHOLD:-0.9}
+      LLM_EXAMPLE_LIMIT: ${LLM_EXAMPLE_LIMIT:-12}
+      LLM_AMOUNT_HINTS: ${LLM_AMOUNT_HINTS:-false}
+      EMBED_MIN_LABELLED: ${EMBED_MIN_LABELLED:-20}
     depends_on:
       postgres:
         condition: service_healthy
@@ -119,6 +136,7 @@ services:
   # Background worker: same image as the backend, no published ports.
   # Starts after the backend is healthy so database migrations have been applied.
   worker:
+    logging: *logging
     build: ./backend
     command: ["python", "-m", "app.worker"]
     environment:
@@ -142,6 +160,11 @@ services:
       EMBED_MIN_NEIGHBOURS: ${EMBED_MIN_NEIGHBOURS:-2}
       EMBED_TASK: ${EMBED_TASK:-classification}
       LLM_CLASSIFY_ENABLED: ${LLM_CLASSIFY_ENABLED:-true}
+      LLM_HINT_THRESHOLD: ${LLM_HINT_THRESHOLD:-0.4}
+      LLM_CONFIDENT_THRESHOLD: ${LLM_CONFIDENT_THRESHOLD:-0.9}
+      LLM_EXAMPLE_LIMIT: ${LLM_EXAMPLE_LIMIT:-12}
+      LLM_AMOUNT_HINTS: ${LLM_AMOUNT_HINTS:-false}
+      EMBED_MIN_LABELLED: ${EMBED_MIN_LABELLED:-20}
       LLM_CONFIDENCE_THRESHOLD: ${LLM_CONFIDENCE_THRESHOLD:-0.8}
     depends_on:
       backend:
@@ -165,6 +188,7 @@ services:
       start_period: 60s
 
   frontend:
+    logging: *logging
     build:
       context: ./frontend
       args:

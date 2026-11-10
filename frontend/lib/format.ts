@@ -223,3 +223,17 @@ export function kindChip(kind: string): string {
   if (kind === "transfer") return "bg-sky-400/10 text-sky-300";
   return "bg-slate-100 text-slate-600";
 }
+
+/** 1536 -> "1.5 KB". For file and database sizes. */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value >= 100 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
+}
+

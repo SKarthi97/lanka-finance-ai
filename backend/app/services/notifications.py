@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import Category, Document, Transaction
-from app.services import transfers
+from app.services import backup_status, transfers
 from app.services.coverage import account_coverage
 from app.services.extraction import ACTIVE_STATUSES
 from app.tuning import STALE_DAYS  # noqa: F401
@@ -125,6 +125,18 @@ def collect(db: Session, user_id: int, today: date | None = None) -> list[Notice
                     href="/",
                 )
             )
+
+    # Backups: only worth mentioning once there is something to lose.
+    if backup_status.has_data(db, user_id):
+        backup = backup_status.status(db, today)
+        if not backup["recorded"]:
+            text = "No backup has been recorded yet. Run backup.ps1 from the scripts folder so your data can be restored."
+        elif backup["stale"]:
+            text = f"The last backup was {backup['age_days']} days ago. Run backup.ps1 from the scripts folder (or check the scheduled task)."
+        else:
+            text = None
+        if text:
+            notices.append(Notice(key="backup", kind="backup", severity="warn", text=text, href="/system"))
 
     pairs = len(transfers.find_pairs(db, user_id))
     if pairs:

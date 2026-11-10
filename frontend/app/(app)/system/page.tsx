@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { LoadError, Skeleton } from "@/components/states";
-import { AiActivity, api, HardwareReport, OllamaStatus } from "@/lib/api";
-import { formatMs } from "@/lib/format";
+import { AiActivity, api, HardwareReport, OllamaStatus, StorageReport } from "@/lib/api";
+import { formatBytes, formatDate, formatMs } from "@/lib/format";
 
 const PURPOSE: Record<string, string> = {
   categorize: "Categorising",
@@ -35,6 +35,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 export default function SystemPage() {
   const [ollama, setOllama] = useState<OllamaStatus | null>(null);
   const [hardware, setHardware] = useState<HardwareReport | null>(null);
+  const [storage, setStorage] = useState<StorageReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [warming, setWarming] = useState(false);
   const [activity, setActivity] = useState<AiActivity | null>(null);
@@ -54,6 +55,12 @@ export default function SystemPage() {
   useEffect(() => {
     api<AiActivity>("/ai/activity")
       .then(setActivity)
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    api<StorageReport>("/system/storage")
+      .then(setStorage)
       .catch(() => undefined);
   }, []);
 
@@ -81,6 +88,42 @@ export default function SystemPage() {
       )}
 
       <div className="grid gap-4 md:grid-cols-2">
+        <Card title="Storage and backup">
+          {storage ? (
+            <>
+              <Row label="Statements / transactions" value={`${storage.statements} / ${storage.transactions}`} />
+              <Row label="Database" value={storage.database_bytes === null ? "n/a" : formatBytes(storage.database_bytes)} />
+              <Row label="Kept statement files" value={`${storage.documents_files} (${formatBytes(storage.documents_bytes)})`} />
+              <Row
+                label="Last backup"
+                value={
+                  storage.backup.recorded ? (
+                    <span className={storage.backup.stale ? "text-amber-800" : "text-green-700"}>
+                      {storage.backup.age_days === 0 ? "today" : `${storage.backup.age_days} days ago`}
+                      {storage.backup.at ? ` (${formatDate(storage.backup.at.slice(0, 10))})` : ""}
+                    </span>
+                  ) : (
+                    <span className="text-amber-800">none recorded</span>
+                  )
+                }
+              />
+              {storage.backup.recorded && (
+                <Row
+                  label="That backup"
+                  value={`${storage.backup.size_kb} KB · ${storage.backup.encrypted ? "encrypted" : "not encrypted"} · ${storage.backup.verified ? "checked" : "not checked"}`}
+                />
+              )}
+              {(!storage.backup.recorded || storage.backup.stale) && (
+                <p className="mt-2 text-xs text-slate-600">
+                  Run <code>scripts\backup.ps1 -Verify -Encrypt</code> (or schedule it, see docs/06). The app learns of each
+                  backup from the script; it cannot see the backup folder.
+                </p>
+              )}
+            </>
+          ) : (
+            <Skeleton className="h-24" />
+          )}
+        </Card>
         <Card title="Local AI (Ollama)">
           {ollama ? (
             <>

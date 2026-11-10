@@ -22,8 +22,8 @@ const config: Config = {
           100: "#2b2e3a",
           200: "#323644",
           300: "#434859",
-          400: "#868fa0", // muted text: at least 4.5:1 on the dark surfaces
-          500: "#98a1b0",
+          400: "#959eaf", // muted text: at least 4.5:1 on every dark surface, including raised ones
+          500: "#a0a9b9",
           600: "#a5adbb",
           700: "#c3c9d4",
           800: "#dde1e8",

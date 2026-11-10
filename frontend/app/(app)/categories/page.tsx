@@ -86,7 +86,7 @@ export default function CategoriesPage() {
     <section className="space-y-4">
       <h1 className="text-xl font-semibold">Categories</h1>
 
-      <div role="tablist" className="flex gap-1 border-b border-slate-200">
+      <div role="tablist" className="flex gap-1 overflow-x-auto border-b border-slate-200">
         {tabs.map((t) => (
           <button
             key={t.id}

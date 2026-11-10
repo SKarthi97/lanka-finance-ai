@@ -173,3 +173,38 @@ manage-bde -status C:                                                           
 `FullyEncrypted` and `On` mean it is protected. If it is off: Settings, Privacy & security, Device
 encryption (or BitLocker Drive Encryption in Control Panel). Save the recovery key somewhere other than this
 computer. An external backup drive can be encrypted the same way (right-click the drive, Turn on BitLocker).
+
+## Is my backup recent? (System page and the bell)
+
+Each successful `backup.ps1` records a time, a size and two flags (encrypted, checked) in the app's settings
+table; nothing about the contents. The **System** page shows "Storage and backup" (statements, transactions,
+database size, kept statement files, last backup) and the notification bell warns when there is data and no
+backup has been recorded, or the last one is older than 7 days (`TUNE_BACKUP_STALE_DAYS`). The app cannot see the
+backup folder, so a backup you delete or move by hand still counts as made. `GET /api/system/storage` returns the
+same figures.
+
+## Upgrading
+
+```
+git pull                                   # new code, if you keep it in git
+.\scripts\upgrade.ps1 -Encrypt              # backup, rebuild, check, and say how to go back
+```
+
+`upgrade.ps1` notes what is running (git commit and database version) in `backups\last-upgrade.txt`, makes a
+verified backup (add `-Encrypt`), runs `docker compose up -d --build` (the backend applies database migrations
+itself on start), waits for every service to be healthy, checks the database is at the newest version, and turns LAN
+access back on if it was on. If anything is wrong it stops and prints the way back:
+
+1. `git checkout <the commit in last-upgrade.txt>` and `docker compose up -d --build` (the old code).
+2. If a migration changed the database and the old code will not start on it, restore the backup named in
+   `last-upgrade.txt` with `restore.ps1`. Migrations are not reversible one by one; the backup is the way back.
+
+Your data is never deleted by an upgrade. Without the script, the same steps by hand are: `backup.ps1 -Verify`,
+`docker compose up -d --build`, `docker compose ps`, and `docker compose exec backend alembic current`.
+
+## Logs and disk space
+
+Every service's log is capped at 3 files of 10 MB (`docker-compose.yml`, `x-logging`), so logs cannot slowly fill
+the disk. The System page shows what your data uses. Old backups are removed by `backup.ps1 -Keep` (default 14).
+Docker's own images and build cache grow separately: `docker system df` shows them, `docker image prune` clears
+unused images.

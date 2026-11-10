@@ -511,3 +511,21 @@ export type SavingsInsights = {
     goal_reached: boolean;
   } | null;
 };
+
+export type StorageReport = {
+  database_bytes: number | null;
+  documents_bytes: number;
+  documents_files: number;
+  statements: number;
+  transactions: number;
+  backup: {
+    recorded: boolean;
+    at: string | null;
+    age_days: number | null;
+    size_kb: number | null;
+    encrypted: boolean | null;
+    verified: boolean | null;
+    stale: boolean;
+  };
+};
+

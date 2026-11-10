@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { GettingStarted } from "@/components/GettingStarted";
 import { useEffect, useState } from "react";
 import { CardSkeleton, LoadError, RowsSkeleton } from "@/components/states";
 import { Sparkline } from "@/components/Sparkline";
@@ -303,6 +304,10 @@ export default function DashboardPage() {
   return (
     <section className="space-y-4">
       <h1 className="text-xl font-semibold">Dashboard</h1>
+
+      {dash?.has_data && (
+        <GettingStarted needsReview={dash.needs_review} uncategorised={dash.uncategorised_total} year={year} month={month} />
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         {(dash?.banks.length ?? 0) > 1 ? (

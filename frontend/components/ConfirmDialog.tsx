@@ -80,6 +80,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
       {children}
       {options && (
         <div
+          role="presentation" // the dimmed backdrop: a click closes it, Escape does the same for the keyboard
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
           onMouseDown={(e) => e.target === e.currentTarget && answer(null)}
         >
