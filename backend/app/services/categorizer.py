@@ -29,7 +29,7 @@ from app.models import (
     Transaction,
 )
 
-SYSTEM_VERSION = 2  # bump when CATEGORIES / RULES below gain entries
+SYSTEM_VERSION = 3  # bump when CATEGORIES / RULES below gain entries
 
 KINDS = ("income", "expense", "transfer")
 
@@ -66,6 +66,11 @@ RULES: list[tuple[str, str, str, int]] = [
     ("INTEREST WITHHELD", "contains", "Tax", 30),
     ("STAMP DUTY", "contains", "Tax", 30),
     ("WHT", "word", "Tax", 30),
+    ("AIT", "word", "Tax", 30),
+    ("ADVANCE INCOME TAX", "contains", "Tax", 30),
+    ("TAX ON INTEREST", "contains", "Tax", 30),
+    ("INTEREST TAX", "contains", "Tax", 30),
+    ("WITHHOLDING TAX", "contains", "Tax", 30),
     ("ATM SERVICE CHARGE", "contains", "Bank charges", 25),
     ("SERVICE CHARGE", "contains", "Bank charges", 20),
     ("SMS ALERT", "contains", "Bank charges", 20),
@@ -287,7 +292,11 @@ def ensure_defaults(db: Session, user_id: int) -> None:
                 setting.value = SYSTEM_VERSION
             db.flush()
     except IntegrityError:
-        pass  # another worker seeded at the same moment
+        return  # another worker seeded at the same moment
+    # New built-in rules must also reach the rows you already have (the version is current now, so
+    # this call does not come back here). Manual choices and AI suggestions are left alone.
+    if setting is not None:
+        classify_rows(db, user_id)
 
 
 # --- classification -----------------------------------------------------------------------

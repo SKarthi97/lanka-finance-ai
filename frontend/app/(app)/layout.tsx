@@ -23,7 +23,7 @@ const NAV: { heading: string; items: { href: string; label: string; icon: string
       { href: "/", label: "Dashboard", icon: "🏠" },
       { href: "/transactions", label: "Transactions", icon: "🧾" },
       { href: "/upload", label: "Upload", icon: "📥" },
-      { href: "/reports", label: "Report", icon: "📄" },
+      { href: "/reports", label: "Reports", icon: "📄" },
     ],
   },
   {

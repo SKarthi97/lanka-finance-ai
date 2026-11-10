@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { LoadError, RowsSkeleton } from "@/components/states";
 import { AiBusy } from "@/components/AiBusy";
 import { GrowthReport } from "@/components/GrowthReport";
+import { IrdReport } from "@/components/IrdReport";
 import { api, Budgets, Dashboard, MonthSummary } from "@/lib/api";
 import { MONTHS_LONG, bankTint, formatDate, formatMoney, formatMs } from "@/lib/format";
 
@@ -13,16 +14,17 @@ const th = "px-3 py-1.5 font-medium";
 export default function ReportsPage() {
   const now = new Date();
   const last = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const [tab, setTab] = useState<"monthly" | "growth">("monthly");
+  const [tab, setTab] = useState<"monthly" | "growth" | "ird">("monthly");
   // Opening a month from the growth table lands on that month's report.
   const [target, setTarget] = useState({ year: last.getFullYear(), month: last.getMonth() + 1 });
   const tabs = [
     { id: "monthly", label: "Monthly report" },
     { id: "growth", label: "Growth (net savings)" },
+    { id: "ird", label: "IRD (Sri Lanka)" },
   ] as const;
   return (
     <section className="space-y-4">
-      <h1 className="text-xl font-semibold print:hidden">Report</h1>
+      <h1 className="text-xl font-semibold print:hidden">Reports</h1>
       <div role="tablist" className="flex gap-1 border-b border-slate-200 print:hidden">
         {tabs.map((t) => (
           <button
@@ -40,6 +42,8 @@ export default function ReportsPage() {
       </div>
       {tab === "monthly" ? (
         <MonthlyReport key={`${target.year}-${target.month}`} initial={target} />
+      ) : tab === "ird" ? (
+        <IrdReport />
       ) : (
         <GrowthReport
           initialYear={target.year}

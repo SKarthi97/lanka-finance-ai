@@ -9,6 +9,7 @@ from app.routers import (
     categories,
     documents,
     insights,
+    ird,
     merchants,
     notifications,
     overview,
@@ -46,6 +47,7 @@ app.include_router(transfers.router)
 app.include_router(notifications.router)
 app.include_router(budgets.router)
 app.include_router(savings.router)
+app.include_router(ird.router)
 app.include_router(recurring.router)
 app.include_router(views.router)
 app.include_router(reports.router)

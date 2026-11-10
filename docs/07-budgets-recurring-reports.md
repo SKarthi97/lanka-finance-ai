@@ -56,3 +56,20 @@ dialog with the menu and top bar hidden; choose "Save as PDF" as the printer (no
 is used). **Download CSV** (`GET /api/reports/monthly.csv?year=&month=`) writes the same
 sections; cells that start with `= + - @` are prefixed so a spreadsheet will not run them, and
 the file starts with a byte-order mark so Excel reads it as UTF-8.
+
+## Reports page: tabs
+
+The page `/reports` (menu: Reports) has three tabs.
+
+* **Monthly report**: the month summary above.
+* **Growth (net savings)**: income minus expenses per month for a year, all banks or one, with
+  the interest credited each month and the annual rate it works out to (`services/interest.py`,
+  `GET /api/savings/interest`): interest / (sum of the end-of-day balances over the days it covers)
+  x 365, the days running from the previous interest credit.
+* **IRD (Sri Lanka)**: income by head for a year of assessment (1 April to 31 March, "2025/26"),
+  `GET /api/reports/ird?year=2025` and `/api/reports/ird.csv`. Salary, interest, dividends and other
+  income come from the categories; tax lines are split into tax on interest, on dividends, and
+  other. It lists missing statement months per account, statements waiting for review and
+  uncategorised credits, because each makes the figures incomplete. It sorts what the statements show;
+  it does not compute tax (rates and reliefs change, and employer-deducted tax and interest credited
+  after tax are not on a statement), and the page says so.

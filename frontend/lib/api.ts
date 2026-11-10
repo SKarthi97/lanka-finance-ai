@@ -478,3 +478,51 @@ export type InterestMonth = {
 };
 
 export type InterestReport = { year: number; accounts: number; unrecognised: number; months: InterestMonth[] };
+
+export type IrdReport = {
+  year: number;
+  label: string;
+  period_start: string;
+  period_end: string;
+  heads: { key: string; label: string; amount: string; tax_withheld: string; count: number }[];
+  other_tax: string;
+  total_income: string;
+  months: {
+    year: number;
+    month: number;
+    employment: string;
+    interest: string;
+    dividends: string;
+    other_income: string;
+    tax_withheld: string;
+  }[];
+  banks: {
+    bank_code: string | null;
+    bank_name: string | null;
+    employment: string;
+    interest: string;
+    interest_tax: string;
+    dividends: string;
+    other_income: string;
+  }[];
+  by_category: { head: string; category: string; amount: string }[];
+  lines: {
+    kind: string;
+    date: string;
+    bank_code: string | null;
+    account_last4: string | null;
+    description: string;
+    amount: string;
+  }[];
+  uncategorised_credits: string;
+  uncategorised_count: number;
+  review_documents: number;
+  possible_tax: string;
+  possible_tax_count: number;
+  coverage: {
+    bank_code: string | null;
+    account_last4: string | null;
+    covered: number;
+    missing: { year: number; month: number }[];
+  }[];
+};
