@@ -61,3 +61,6 @@ next-env.d.ts
 # Browser tests
 frontend/playwright-report/
 frontend/test-results/
+
+# The LAN proxy certificate is personal to this install
+lan/*.crt

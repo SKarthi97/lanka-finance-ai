@@ -1,0 +1,18 @@
+# HTTPS front door for use from other devices on your home network (docker-compose.lan.yml).
+# Caddy makes its own certificate authority inside the container and signs a certificate for this
+# computer's address. Nothing is requested from the internet. Other devices must trust that
+# authority once (see docs/windows-setup.md).
+{
+	admin off
+	skip_install_trust
+	auto_https disable_redirects
+	# A browser opening https://<address> sends no server name (only names get one). Serve the
+	# certificate made for the address to those, and the one for the computer name to the rest.
+	default_sni {$LAN_HOST}
+}
+
+https://{$LAN_HOST}:8443, https://{$LAN_NAME}:8443 {
+	tls internal
+	encode gzip
+	reverse_proxy frontend:3000
+}

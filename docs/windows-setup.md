@@ -123,3 +123,59 @@ backend container tries to reach an outside address by number and by name. It pa
 CAN reach out (so the test is meaningful), the offline copy cannot, and the offline copy still reaches its own
 database. Your running app is not touched. The backend tests also fail if code that opens network connections
 appears outside the modules that talk to the local model (`backend/tests/test_guards.py`).
+
+## Use the app from another device (phone, laptop) on your home network
+
+By default the app answers only on this computer (`127.0.0.1`). To open it from another device on the same
+Wi-Fi or network, use the HTTPS override. Plain HTTP is not offered: your password and session cookie would
+travel unprotected across the network.
+
+```
+.\scripts\lan.ps1 -OpenFirewall        # PowerShell as administrator the first time
+```
+
+What it does: starts a small Caddy proxy (`docker-compose.lan.yml`, `lan\Caddyfile`) on port 8443 that makes
+its own certificate authority and signs a certificate for this computer's address (nothing is requested from
+the internet); makes the session cookie HTTPS-only (`COOKIE_SECURE`); opens Windows Firewall for port 8443 from
+your **local network only, on Private networks only**; and saves the authority's certificate as
+`lan\lanka-local-ca.crt`. The app itself stays bound to `127.0.0.1`: only the proxy is reachable from outside.
+On this computer you still use `http://127.0.0.1:3000` (browsers accept the secure cookie on localhost).
+
+Then, on the other device, open `https://<this computer's address>:8443` (the script prints it). The first time,
+install `lanka-local-ca.crt` so the browser trusts it (otherwise it warns):
+
+| Device | Install the certificate |
+|---|---|
+| Windows | Double-click the file, Install Certificate, Local Machine, "Trusted Root Certification Authorities" |
+| iPhone / iPad | Send the file to it (AirDrop or email), open it, Settings > Profile Downloaded > Install; then Settings > General > About > Certificate Trust Settings, switch the certificate on |
+| Android | Settings > Security > Encryption and credentials > Install a certificate > CA certificate |
+| Mac | Open the file (Keychain Access), set it to "Always Trust" |
+
+The certificate is only a public certificate; copying it is safe. Do not copy anything else from the
+`caddy_data` volume: it holds the authority's private key.
+
+Things to know:
+
+* **Give this computer a fixed address.** In your router, reserve an address for it (a DHCP reservation). If the
+  address changes, run `lan.ps1` again; the certificate is made for the address it was started with. The second
+  name (`<computer>.local`) works on devices that resolve such names (most Apple, Windows 10/11 and many
+  Android devices) and survives an address change.
+* **A timeout from the other device means the Windows Firewall is blocking it.** Two things must both be true:
+  the Wi-Fi network is marked **Private** (a home network is often marked Public, and Windows blocks incoming
+  connections on Public), and a rule allows port 8443. Docker Desktop can also carry its own *block* rule for
+  Public networks, and a block rule beats an allow rule, so marking the network Private is the part that
+  matters. `lan.ps1` tells you which case you are in. Both fixes need an administrator:
+  `Set-NetConnectionProfile -InterfaceAlias Wi-Fi -NetworkCategory Private`, then the `New-NetFirewallRule` line below.
+  Other causes to rule out: the device is on a guest network or has "AP/client isolation" on the router, or
+  it is on mobile data instead of the same Wi-Fi.
+* **No administrator rights?** Leave `-OpenFirewall` off. Docker Desktop normally has its own allow rule for
+  Private networks, so another device may connect anyway. If it cannot, the rule needs someone with admin
+  approval: `New-NetFirewallRule -DisplayName "Lanka Finance AI (LAN HTTPS)" -Direction Inbound -Protocol TCP -LocalPort 8443 -Profile Private -RemoteAddress LocalSubnet -Action Allow`.
+* **Your computer must be on and Docker running** for the other device to reach it.
+* **Anyone on your network can reach the sign-in page.** Use a strong password (sign-ins lock out after repeated
+  failures). Use this only on a network you control; the firewall rule is limited to the Private profile.
+  Windows marks a network Private or Public in Settings > Network & internet > (your network) > Properties.
+* **Turn it off** with `.\scripts\lan.ps1 -Down` (stops the proxy, removes the firewall rule, restores the cookie
+  setting). Your data is not touched either way.
+* To use another port, `-Port 9443`; to bind the proxy to one adapter only, set `LAN_BIND` to that address.
+

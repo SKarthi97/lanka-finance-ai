@@ -16,6 +16,13 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
+# These scripts run in your PowerShell session: put back whatever they change, so a later
+# `docker compose up -d` in the same window still uses your own .env settings.
+$touched = "POSTGRES_PASSWORD", "FRONTEND_PORT", "LLM_CLASSIFY_ENABLED", "COOKIE_SECURE", "E2E_BASE_URL"
+$savedEnv = @{}
+foreach ($n in $touched) { $savedEnv[$n] = [Environment]::GetEnvironmentVariable($n, "Process") }
+function Restore-Env { foreach ($n in $touched) { [Environment]::SetEnvironmentVariable($n, $savedEnv[$n], "Process") } }
+
 $env:POSTGRES_PASSWORD = "e2e-only-password"
 $env:FRONTEND_PORT = "3100"
 $env:LLM_CLASSIFY_ENABLED = "false"
@@ -46,4 +53,5 @@ finally {
     if (-not $Keep) {
         docker compose -p $project down -v | Out-Null
     }
+    Restore-Env
 }
