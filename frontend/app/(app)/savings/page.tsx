@@ -25,7 +25,8 @@ export default function SavingsPage() {
 
   useEffect(() => {
     setFailed(false);
-    const query = plain.test(goal) && Number(goal) > 0 ? `?goal=${goal}` : "";
+    const clean = goal.replace(/[,\s]/g, "");
+    const query = plain.test(clean) && Number(clean) > 0 ? `?goal=${clean}` : "";
     api<SavingsInsights>(`/savings/insights${query}`)
       .then(setData)
       .catch(() => setFailed(true));
@@ -168,7 +169,8 @@ export default function SavingsPage() {
                       value={goal}
                       onChange={(e) => {
                         setGoal(e.target.value);
-                        if (plain.test(e.target.value) || e.target.value === "") savePref("savingsGoal", e.target.value);
+                        const c = e.target.value.replace(/[,\s]/g, "");
+                        if (plain.test(c) || c === "") savePref("savingsGoal", c);
                       }}
                       placeholder="for example 1000000"
                       className="mt-1 block w-full rounded border border-slate-300 bg-surface px-2 py-1.5"
@@ -182,9 +184,14 @@ export default function SavingsPage() {
                     At this pace you would reach the goal in about {plan.months_to_goal} month{plan.months_to_goal === 1 ? "" : "s"}.
                   </p>
                 )}
-                {!plan.goal_reached && plan.months_to_goal === null && plain.test(goal) && (
-                  <p className="rounded bg-amber-50 px-3 py-2 text-sm text-amber-400">
+                {!plan.goal_reached && plan.months_to_goal === null && plain.test(goal.replace(/[,\s]/g, "")) && (
+                  <p className="rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">
                     The balance is not growing at the moment, so this pace never reaches the goal.
+                  </p>
+                )}
+                {goal.trim() !== "" && !plain.test(goal.replace(/[,\s]/g, "")) && (
+                  <p className="rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    Enter the goal as a plain number, for example 1000000.
                   </p>
                 )}
 
@@ -192,7 +199,7 @@ export default function SavingsPage() {
                   {plan.points.map((p) => {
                     const d = new Date(`${p.day}T00:00:00`);
                     return (
-                      <div key={p.day} className="flex flex-1 flex-col items-center justify-end" title={`${MONTHS[d.getMonth()]} ${d.getFullYear()}: ${formatMoney(p.balance)}`}>
+                      <div key={p.day} className="flex h-full flex-1 flex-col items-center justify-end" title={`${MONTHS[d.getMonth()]} ${d.getFullYear()}: ${formatMoney(p.balance)}`}>
                         <div className="w-full rounded-t bg-accent/70" style={{ height: `${Math.max(2, (Math.max(0, Number(p.balance)) / top) * 100)}%` }} />
                         <span className="mt-1 text-[10px] text-slate-500">{MONTHS[d.getMonth()]}</span>
                       </div>
