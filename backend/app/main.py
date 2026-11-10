@@ -7,6 +7,7 @@ from app.routers import (
     auth,
     budgets,
     categories,
+    categorization,
     documents,
     history,
     imports,
@@ -17,13 +18,14 @@ from app.routers import (
     overview,
     recurring,
     reports,
+    rules,
     savings,
-    tracker,
-    trend,
     search,
     system,
+    tracker,
     transactions,
     transfers,
+    trend,
     views,
 )
 
@@ -51,6 +53,8 @@ app.include_router(overview.router)
 app.include_router(trend.router)
 app.include_router(tracker.router)
 app.include_router(categories.router)
+app.include_router(rules.router)
+app.include_router(categorization.router)
 app.include_router(transfers.router)
 app.include_router(notifications.router)
 app.include_router(budgets.router)

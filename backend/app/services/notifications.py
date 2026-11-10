@@ -15,10 +15,10 @@ from app.models import Category, Document, Transaction
 from app.services import transfers
 from app.services.coverage import account_coverage
 from app.services.extraction import ACTIVE_STATUSES
+from app.tuning import STALE_DAYS  # noqa: F401
 
 # An account whose latest statement ended longer ago than this is "out of date"; the dashboard
 # uses the same number for its "out of date" flag.
-STALE_DAYS = 45
 
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
@@ -97,7 +97,7 @@ def collect(db: Session, user_id: int, today: date | None = None) -> list[Notice
         )
 
     # Missing months and balance breaks, per account.
-    docs_by_key = {key: doc for key, doc in latest.items()}
+    docs_by_key = dict(latest)
     for key, coverage in account_coverage(db, user_id).items():
         doc = docs_by_key.get(key)
         label = _label(doc) if doc else "An account"

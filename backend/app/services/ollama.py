@@ -4,7 +4,6 @@ import httpx
 
 from app.config import Settings
 
-
 # Models that answered "does not support thinking" once; they are not sent the option again.
 _NO_THINK_SUPPORT: set[str] = set()
 

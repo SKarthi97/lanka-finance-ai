@@ -21,9 +21,8 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
 
-TAX_WINDOW_DAYS = 3  # withheld tax is taken on the credit day or just after
-MIN_ASSUMED_DAYS = 25  # a first credit needs about a month of data to be worth a rate
-MIN_SAME_MONTH_DAYS = 20  # ...or this many days when it is taken to pay for its own month
+from app.tuning import MIN_ASSUMED_DAYS, MIN_SAME_MONTH_DAYS, TAX_WINDOW_DAYS  # noqa: F401
+
 SAME_MONTH = "the month it was credited in"
 
 

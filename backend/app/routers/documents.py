@@ -135,7 +135,7 @@ async def upload_document(
     try:
         pdf = pymupdf.open(stream=data, filetype="pdf")
     except Exception:  # noqa: BLE001 - any parser failure means "not a usable PDF"
-        raise _error(422, "unreadable_pdf", "This file could not be read as a PDF.")
+        raise _error(422, "unreadable_pdf", "This file could not be read as a PDF.") from None
 
     try:
         encrypted = bool(pdf.needs_pass)
@@ -200,7 +200,7 @@ async def upload_document(
                 Document.user_id == user_id, Document.sha256 == sha256
             )
         )
-        raise _duplicate(winner)
+        raise _duplicate(winner) from None
     except Exception:
         db.rollback()
         if created_file:

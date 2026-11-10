@@ -9,8 +9,8 @@ import signal
 import socket
 import threading
 import time
-from pathlib import Path
 from collections.abc import Callable
+from pathlib import Path
 
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -22,8 +22,10 @@ from app.services.categorizer import classify_all_users
 from app.services.dedupe import refresh_all_users
 from app.services.extraction import extract_transactions
 from app.services.inspection import inspect_document
-from app.services.llm_classifier import JOB_TYPE as CLASSIFY_JOB, run_classify_job
-from app.services.merchants import JOB_TYPE as NAMING_JOB, run_naming_job
+from app.services.llm_classifier import JOB_TYPE as CLASSIFY_JOB
+from app.services.llm_classifier import run_classify_job
+from app.services.merchants import JOB_TYPE as NAMING_JOB
+from app.services.merchants import run_naming_job
 
 log = logging.getLogger("worker")
 

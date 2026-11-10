@@ -2,6 +2,33 @@
 # Only the frontend publishes a port (bound to 127.0.0.1 by default).
 # Copy .env.example to .env and set POSTGRES_PASSWORD before starting.
 
+# Thresholds for reports and alerts (backend/app/tuning.py). Empty means the built-in default;
+# set TUNE_<NAME> in the .env file and restart to change one (no rebuild).
+x-tuning: &tuning
+  TUNE_BUDGET_NEAR: ${TUNE_BUDGET_NEAR:-}
+  TUNE_TRAILING_DAYS: ${TUNE_TRAILING_DAYS:-}
+  TUNE_DROP_POINTS: ${TUNE_DROP_POINTS:-}
+  TUNE_DROP_BASELINE: ${TUNE_DROP_BASELINE:-}
+  TUNE_DROP_MIN_BEFORE: ${TUNE_DROP_MIN_BEFORE:-}
+  TUNE_IDLE_NO_INTEREST_DAYS: ${TUNE_IDLE_NO_INTEREST_DAYS:-}
+  TUNE_IDLE_WINDOW_DAYS: ${TUNE_IDLE_WINDOW_DAYS:-}
+  TUNE_IDLE_MIN_BALANCE: ${TUNE_IDLE_MIN_BALANCE:-}
+  TUNE_PROJECTION_MONTHS: ${TUNE_PROJECTION_MONTHS:-}
+  TUNE_TREND_MONTHS: ${TUNE_TREND_MONTHS:-}
+  TUNE_TAX_WINDOW_DAYS: ${TUNE_TAX_WINDOW_DAYS:-}
+  TUNE_MIN_ASSUMED_DAYS: ${TUNE_MIN_ASSUMED_DAYS:-}
+  TUNE_MIN_SAME_MONTH_DAYS: ${TUNE_MIN_SAME_MONTH_DAYS:-}
+  TUNE_NEAR_BEFORE_DAYS: ${TUNE_NEAR_BEFORE_DAYS:-}
+  TUNE_NEAR_AFTER_DAYS: ${TUNE_NEAR_AFTER_DAYS:-}
+  TUNE_STALE_DAYS: ${TUNE_STALE_DAYS:-}
+  TUNE_RECURRING_AMOUNT_TOLERANCE: ${TUNE_RECURRING_AMOUNT_TOLERANCE:-}
+  TUNE_RECURRING_SHARE: ${TUNE_RECURRING_SHARE:-}
+  TUNE_TRANSFER_WINDOW_DAYS: ${TUNE_TRANSFER_WINDOW_DAYS:-}
+  TUNE_FLAG_MIN_PEERS: ${TUNE_FLAG_MIN_PEERS:-}
+  TUNE_FLAG_LARGE_TIMES: ${TUNE_FLAG_LARGE_TIMES:-}
+  TUNE_FLAG_MIN_PAYMENTS_FOR_NEW_PAYEE: ${TUNE_FLAG_MIN_PAYMENTS_FOR_NEW_PAYEE:-}
+  TUNE_FLAG_NEW_PAYEE_TIMES: ${TUNE_FLAG_NEW_PAYEE_TIMES:-}
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -52,6 +79,7 @@ services:
   backend:
     build: ./backend
     environment:
+      <<: *tuning
       DATABASE_URL: postgresql+psycopg://lanka:${POSTGRES_PASSWORD}@postgres:5432/lanka
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:1.5b}
@@ -94,6 +122,7 @@ services:
     build: ./backend
     command: ["python", "-m", "app.worker"]
     environment:
+      <<: *tuning
       DATABASE_URL: postgresql+psycopg://lanka:${POSTGRES_PASSWORD}@postgres:5432/lanka
       DOCUMENTS_DIR: /data/documents
       MAX_PAGES: ${MAX_PAGES:-300}

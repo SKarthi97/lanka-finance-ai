@@ -134,7 +134,7 @@ def vectors_for(
     missing = [s for s in dict.fromkeys(stems) if s not in found]
     if missing:
         fresh = embed_texts(db, settings, missing, transport)
-        for stem, vector in zip(missing, fresh):
+        for stem, vector in zip(missing, fresh, strict=False):
             db.add(StemEmbedding(user_id=user_id, stem=stem[:200], model=model, vector=vector.tobytes()))
             found[stem] = vector
     return found

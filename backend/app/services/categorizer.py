@@ -13,9 +13,9 @@ higher priority wins, then the longer pattern, so "INTEREST WITHHELD" (tax) beat
 """
 
 import re
-from decimal import Decimal
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+from decimal import Decimal
 from functools import lru_cache
 
 from sqlalchemy import or_, select, update

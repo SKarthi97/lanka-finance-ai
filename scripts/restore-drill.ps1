@@ -32,13 +32,24 @@ function Assert-Ok([string]$what) {
 }
 
 if (-not $File) {
-  $latest = Get-ChildItem -Path (Join-Path $root "backups") -Filter "lanka-*.dump" -ErrorAction SilentlyContinue |
+  $latest = Get-ChildItem -Path (Join-Path $root "backups") -Filter "lanka-*.dump*" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
   if (-not $latest) { throw "No backup found in backups\. Run .\scripts\backup.ps1 first." }
   $File = $latest.FullName
 }
 if (-not (Test-Path $File)) { throw "File not found: $File" }
 $File = (Resolve-Path $File).Path
+
+# An encrypted backup (.dump.enc) is opened into a temporary file that is removed afterwards.
+$plainTemp = $null
+if ($File -like "*.enc") {
+  . (Join-Path $PSScriptRoot "crypto.ps1")
+  $secret = Read-LfPassphrase -File (Get-LfPassphraseFile)
+  $plainTemp = Join-Path ([System.IO.Path]::GetTempPath()) ("lanka-drill-" + [guid]::NewGuid().ToString("N") + ".dump")
+  Write-Host "Decrypting ..."
+  Unprotect-LfFile -Path $File -Out $plainTemp -Passphrase $secret
+}
+$source = if ($plainTemp) { $plainTemp } else { $File }
 Write-Host "Trying the backup: $File"
 
 $project = "lanka-drill"
@@ -60,7 +71,7 @@ try {
   }
   if (-not $ready) { throw "The drill database did not become ready." }
 
-  docker compose -p $project cp $File "postgres:$inside"
+  docker compose -p $project cp $source "postgres:$inside"
   Assert-Ok "Copying the dump in"
   docker compose -p $project exec -T postgres pg_restore --list $inside | Out-Null
   Assert-Ok "Reading the dump"
@@ -97,6 +108,7 @@ try {
 }
 finally {
   docker compose -p $project exec -T postgres rm -f $inside 2>$null | Out-Null
+  if ($plainTemp) { Remove-Item $plainTemp -Force -ErrorAction SilentlyContinue }
   if ($Keep -and $ok) {
     Write-Host "The test copy is running on http://127.0.0.1:3200 . Remove it later with: docker compose -p $project down -v"
   }

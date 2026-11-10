@@ -8,7 +8,7 @@ System page.
 
 import math
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
@@ -31,7 +31,7 @@ class Progress:
 
 
 def _aware(moment: datetime) -> datetime:
-    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+    return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
 
 
 def avg_call_ms(db: Session, purpose: str) -> int | None:
@@ -55,7 +55,7 @@ def progress(
     cap: int,
     now: datetime | None = None,
 ) -> Progress:
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     result = Progress(waiting=waiting)
     average = avg_call_ms(db, purpose)
     if average is not None:
@@ -129,7 +129,7 @@ class PurposeSummary:
 
 
 def summary(db: Session, now: datetime | None = None) -> list[PurposeSummary]:
-    since = (now or datetime.now(timezone.utc)) - timedelta(days=ACTIVITY_DAYS)
+    since = (now or datetime.now(UTC)) - timedelta(days=ACTIVITY_DAYS)
     rows = db.execute(
         select(
             ModelRun.purpose,

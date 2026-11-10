@@ -105,7 +105,9 @@ def _conditions(user_id: int, f: Filters) -> list:
     if f.flagged:  # any row that did not pass every check
         conditions.append(Transaction.validation_status != "ok")
     if f.q:
-        conditions.append(Transaction.original_description.ilike(f"%{f.q.strip()}%"))
+        # % and _ typed by the user are ordinary characters, not wildcards.
+        needle = f.q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        conditions.append(Transaction.original_description.ilike(f"%{needle}%", escape="\\"))
     # The amount of a row is whichever of debit and credit it has.
     amount = Transaction.debit + Transaction.credit
     if f.min_amount is not None:

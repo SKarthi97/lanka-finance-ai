@@ -125,7 +125,7 @@ def test_a_stem_split_between_categories_has_no_label(logged_in, session_factory
     run_pipeline(client, csrf, session_factory, test_settings, boc_pdf(rows=rows, closing="980.00"))
     ids = {c["name"]: c["id"] for c in client.get("/api/categories").json()}
     items = client.get("/api/transactions").json()["items"]
-    for item, cat in zip(items, ("Shopping", "Fuel")):
+    for item, cat in zip(items, ("Shopping", "Fuel"), strict=False):
         client.put(f"/api/transactions/{item['id']}/category", json={"category_id": ids[cat]}, headers=H(csrf))
     with session_factory() as db:
         assert embeddings.labelled_stems(db, 1) == {}

@@ -111,3 +111,15 @@ database, remove the `pgdata` volume (`docker compose down`, then
 
 All services have health checks (`docker compose ps` shows them). The worker proves it is alive by
 touching a heartbeat file every 10 seconds (a long model call does not make it look dead).
+
+### Prove the offline override works
+
+```
+.\scripts\check-offline.ps1
+```
+
+Starts a separate copy of the stack twice (normal, then with `docker-compose.offline.yml`) and from inside the
+backend container tries to reach an outside address by number and by name. It passes only if the normal copy
+CAN reach out (so the test is meaningful), the offline copy cannot, and the offline copy still reaches its own
+database. Your running app is not touched. The backend tests also fail if code that opens network connections
+appears outside the modules that talk to the local model (`backend/tests/test_guards.py`).

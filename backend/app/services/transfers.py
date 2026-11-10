@@ -25,8 +25,8 @@ from app.models import (
     TransferRejection,
 )
 from app.services.extraction import ACTIVE_STATUSES
+from app.tuning import TRANSFER_WINDOW_DAYS as WINDOW_DAYS
 
-WINDOW_DAYS = 3
 ZERO = Decimal("0.00")
 
 

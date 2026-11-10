@@ -133,3 +133,43 @@ When no account number was found, the hash has no account in it, so rows are now
 while a re-downloaded copy of the same bank's statement still is. The Statements tab and tracker
 show "account not detected" for such statements; if the number is on the PDF but not found, send
 a masked `verify_pdf --shape` output and the adapter can be taught the layout.
+
+## Encrypted backups
+
+A backup holds every transaction, so it is as confidential as the database. Two layers:
+
+**1. Encrypt the file** (`backup.ps1 -Encrypt`). AES-256 with a key from your passphrase (PBKDF2-SHA256,
+200,000 rounds) and a check value (HMAC-SHA256) that is verified before anything is decrypted, so a wrong
+passphrase or a damaged file is reported plainly. It needs nothing beyond Windows. The plain dump is
+removed once the encrypted copy has been proven to open and match. The result is `lanka-<date>.dump.enc`.
+
+```
+.\scripts\backup.ps1 -Encrypt -Verify               # asks for the passphrase (twice)
+.\scripts\set-backup-passphrase.ps1                  # once, for scheduled runs (see below)
+.\scripts\restore.ps1 -File backups\lanka-....dump.enc   # asks for the passphrase
+.\scripts\restore-drill.ps1                          # the newest backup, encrypted or not
+```
+
+For a scheduled task, `set-backup-passphrase.ps1` stores the passphrase protected by Windows for your user
+on this computer (`%LOCALAPPDATA%\LankaFinanceAI\backup.key`, DPAPI), and the task adds `-Encrypt`:
+
+```
+schtasks /Create /SC DAILY /ST 21:00 /TN "Lanka Finance backup" /TR "powershell -NoProfile -ExecutionPolicy Bypass -File D:\lanka-finance-ai\scripts\backup.ps1 -Verify -Encrypt" /F
+```
+
+**There is no recovery.** Lose the passphrase and the backup cannot be opened by anyone, including me.
+Keep it in a password manager. The stored copy only works for your Windows user on this computer, so it
+will not help if the computer is lost.
+
+**2. Encrypt the disk.** An encrypted file protects the backup, but your live database and any retained
+PDFs sit on the computer's disk (Docker keeps them in a virtual disk under your user profile). Turn on
+BitLocker (Windows Pro) for the drive that holds your profile and the drive you back up to:
+
+```
+Get-BitLockerVolume | Select-Object MountPoint, VolumeStatus, ProtectionStatus      # PowerShell as administrator
+manage-bde -status C:                                                                # the same, older tool
+```
+
+`FullyEncrypted` and `On` mean it is protected. If it is off: Settings, Privacy & security, Device
+encryption (or BitLocker Drive Encryption in Control Panel). Save the recovery key somewhere other than this
+computer. An external backup drive can be encrypted the same way (right-click the drive, Turn on BitLocker).

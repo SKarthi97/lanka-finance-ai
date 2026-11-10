@@ -3,7 +3,7 @@ import secrets
 import threading
 import time
 from collections import defaultdict, deque
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
@@ -38,7 +38,7 @@ def hash_token(token: str) -> str:
 
 def as_utc(value: datetime) -> datetime:
     """SQLite returns naive datetimes; treat them as UTC."""
-    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
 
 
 class LoginRateLimiter:

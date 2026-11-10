@@ -52,9 +52,9 @@ def _run(db, settings, session, rows, **kwargs) -> ImportOut:
     try:
         document = importer.import_rows(db, settings, session.user_id, rows, **kwargs)
     except importer.ImportError_ as error:
-        raise _fail(422, error)
+        raise _fail(422, error) from None
     except ValueError:
-        raise HTTPException(409, detail={"code": "duplicate", "row": None})
+        raise HTTPException(409, detail={"code": "duplicate", "row": None}) from None
     if enqueue_classification(db, settings, session.user_id) | enqueue_naming(db, settings, session.user_id):
         db.commit()
     return ImportOut(document_id=document.id, status=document.status, rows=len(rows))
@@ -76,7 +76,7 @@ async def import_csv(
     try:
         rows = importer.parse_csv(data)
     except importer.ImportError_ as error:
-        raise _fail(422, error)
+        raise _fail(422, error) from None
     return _run(
         db, settings, session, rows,
         label=file.filename or "import.csv", source="csv_import",

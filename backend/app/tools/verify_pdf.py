@@ -171,7 +171,7 @@ def report(
                 per_year = Counter(r.date.year for r in rows)
                 out(f"years spanned: {len(per_year)} (rows per year, oldest first: "
                     f"{[per_year[y] for y in sorted(per_year)]})")
-                gaps = [(b.date - a.date).days for a, b in zip(rows, rows[1:])]
+                gaps = [(b.date - a.date).days for a, b in zip(rows, rows[1:], strict=False)]
                 out(f"largest gap between consecutive rows (days): {max(gaps, default=0)}")
 
             # What the statement says about itself vs what was extracted: counts and

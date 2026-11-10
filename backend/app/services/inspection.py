@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 
 from app import storage
 from app.config import Settings
-from app.models import Document, DocumentPage, Job
 from app.job_queue import enqueue
+from app.models import Document, DocumentPage, Job
 
 MIN_TEXT_CHARS = 30
 

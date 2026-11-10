@@ -38,6 +38,17 @@ function Assert-Ok([string]$what) {
 if (-not (Test-Path $File)) { throw "File not found: $File" }
 $File = (Resolve-Path $File).Path
 
+# An encrypted backup (.dump.enc) is opened into a temporary file that is removed afterwards.
+$plainTemp = $null
+if ($File -like "*.enc") {
+  . (Join-Path $PSScriptRoot "crypto.ps1")
+  $secret = Read-LfPassphrase -File $null
+  $plainTemp = Join-Path ([System.IO.Path]::GetTempPath()) ("lanka-restore-" + [guid]::NewGuid().ToString("N") + ".dump")
+  Write-Host "Decrypting ..."
+  Unprotect-LfFile -Path $File -Out $plainTemp -Passphrase $secret
+}
+$source = if ($plainTemp) { $plainTemp } else { $File }
+
 if (-not $Force) {
   Write-Host "This REPLACES the current database with:"
   Write-Host "  $File"
@@ -56,7 +67,7 @@ docker compose stop frontend worker backend
 Assert-Ok "Stopping the app"
 
 try {
-  docker compose cp $File "postgres:$inside"
+  docker compose cp $source "postgres:$inside"
   Assert-Ok "Copying the dump into the container"
 
   docker compose exec -T postgres pg_restore --list $inside | Out-Null
@@ -73,6 +84,7 @@ try {
 }
 finally {
   docker compose exec -T postgres rm -f $inside | Out-Null
+  if ($plainTemp) { Remove-Item $plainTemp -Force -ErrorAction SilentlyContinue }
 }
 
 Write-Host "Starting the app (it applies any newer migrations) ..."

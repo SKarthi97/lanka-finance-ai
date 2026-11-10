@@ -11,7 +11,7 @@ def statement(rates):
     balance = Decimal("100000.00")
     rows = []
     days = [(1, 2, 31), (1, 3, 28), (1, 4, 31), (1, 5, 30)]
-    for (day, month, length), pct in zip(days, rates):
+    for (day, month, length), pct in zip(days, rates, strict=False):
         amount = (balance * Decimal(str(pct)) / 100 * length / 365).quantize(Decimal("0.01"))
         balance += amount
         rows.append((f"{day:02d}/{month:02d}", "INTEREST CREDIT SYNTHETIC", f"{amount:,.2f}", f"{balance:,.2f}"))

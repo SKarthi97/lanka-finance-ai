@@ -22,6 +22,15 @@
   documents-<date>-<time>\ beside the dump. Reconciled statements are normally deleted after
   extraction, so this is usually small or empty.
 
+.PARAMETER Encrypt
+  Encrypt the dump with a passphrase (AES-256, see crypto.ps1) and keep only the .dump.enc file. The
+  passphrase is asked for, or read from the file made by set-backup-passphrase.ps1 (for scheduled runs).
+  There is no recovery: keep the passphrase somewhere safe. restore.ps1 and restore-drill.ps1 accept the
+  .enc file and ask for the passphrase.
+
+.PARAMETER PassphraseFile
+  Where the saved passphrase is. Default: %LOCALAPPDATA%\LankaFinanceAI\backup.key
+
 .PARAMETER Verify
   After the dump, restore it into a throwaway database (lanka_verify), print how many
   documents and transactions it holds, and drop it again. The live database is not touched.
@@ -33,7 +42,9 @@ param(
   [string]$Folder = "backups",
   [int]$Keep = 14,
   [switch]$IncludeDocuments,
-  [switch]$Verify
+  [switch]$Verify,
+  [switch]$Encrypt,
+  [string]$PassphraseFile
 )
 
 $ErrorActionPreference = "Stop"
@@ -86,6 +97,24 @@ finally {
   docker compose exec -T postgres rm -f $inside | Out-Null
 }
 
+if ($Encrypt) {
+  . (Join-Path $PSScriptRoot "crypto.ps1")
+  if (-not $PassphraseFile) { $PassphraseFile = Get-LfPassphraseFile }
+  $secret = Read-LfPassphrase -File $PassphraseFile -Confirm
+  $encrypted = "$target.enc"
+  Write-Host "Encrypting the backup ..."
+  Protect-LfFile -Path $target -Out $encrypted -Passphrase $secret
+  # Prove the encrypted copy opens with this passphrase and matches, before the plain one is removed.
+  $check = Join-Path ([System.IO.Path]::GetTempPath()) ("lanka-check-" + [guid]::NewGuid().ToString("N"))
+  try {
+    Unprotect-LfFile -Path $encrypted -Out $check -Passphrase $secret
+    if ((Get-FileHash $check).Hash -ne (Get-FileHash $target).Hash) { throw "The encrypted copy does not match the dump." }
+  }
+  finally { Remove-Item $check -Force -ErrorAction SilentlyContinue }
+  Remove-Item $target -Force
+  $target = $encrypted
+}
+
 if ($IncludeDocuments) {
   $docs = Join-Path $Folder "documents-$stamp"
   Write-Host "Copying retained statement PDFs ..."
@@ -94,9 +123,9 @@ if ($IncludeDocuments) {
 }
 
 # Keep only the newest $Keep backups.
-$old = Get-ChildItem $Folder -Filter "lanka-*.dump" | Sort-Object Name -Descending | Select-Object -Skip $Keep
+$old = Get-ChildItem $Folder -Filter "lanka-*.dump*" | Sort-Object Name -Descending | Select-Object -Skip $Keep
 foreach ($file in $old) {
-  $suffix = $file.BaseName.Substring("lanka-".Length)
+  $suffix = ($file.Name -replace '^lanka-', '') -replace '\.dump(\.enc)?$', ''
   Remove-Item $file.FullName -Force
   $leftover = Join-Path $Folder "documents-$suffix"
   if (Test-Path $leftover) { Remove-Item $leftover -Recurse -Force }
@@ -104,4 +133,5 @@ foreach ($file in $old) {
 
 $size = [math]::Round((Get-Item $target).Length / 1KB)
 Write-Host "Backup written: $target ($size KB)"
-Write-Host "Keep this folder on an encrypted drive. It is never committed to git."
+if ($Encrypt) { Write-Host "The backup is encrypted. Keep the passphrase safe: without it the file cannot be opened." }
+else { Write-Host "Keep this folder on an encrypted drive (or use -Encrypt). It is never committed to git." }

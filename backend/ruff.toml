@@ -1,9 +1,17 @@
-# Ruff: a fast linter. Start small (syntax errors and pyflakes: unused imports and names,
-# undefined names) and widen later. `ruff check --fix` removes unused imports.
+# Ruff: a fast linter. Rules in use: syntax and pyflakes (E4, E7, E9, F), import order (I), likely
+# bugs (B), modern syntax (UP), tidy comprehensions (C4) and redundant code (PIE).
+# `ruff check --fix` handles the safe ones; the rest are listed by `ruff check`.
 target-version = "py312"
 line-length = 120
 extend-exclude = ["alembic/versions", "venv"]
 
 [lint]
-select = ["E4", "E7", "E9", "F"]
-ignore = ["E731"]  # short lambdas used as test helpers
+select = ["E4", "E7", "E9", "F", "I", "B", "UP", "C4", "PIE"]
+ignore = [
+  "E731",  # short lambdas used as test helpers
+  "B008",  # FastAPI's Depends(...) in argument defaults is the framework's idiom
+  "UP047",  # generic functions: the older TypeVar style is fine
+]
+
+[lint.isort]
+known-first-party = ["app"]

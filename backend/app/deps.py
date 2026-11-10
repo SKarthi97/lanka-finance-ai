@@ -1,5 +1,5 @@
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
@@ -32,7 +32,7 @@ def get_current_session(
     session = db.scalar(
         select(UserSession).where(UserSession.token_hash == hash_token(token))
     )
-    if session is None or as_utc(session.expires_at) <= datetime.now(timezone.utc):
+    if session is None or as_utc(session.expires_at) <= datetime.now(UTC):
         if session is not None:
             db.delete(session)
             db.commit()

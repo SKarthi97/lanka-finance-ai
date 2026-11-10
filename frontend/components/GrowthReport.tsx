@@ -4,11 +4,11 @@ import { useEffect, useState } from "react";
 import { LoadError, RowsSkeleton } from "@/components/states";
 import { api, Bank, InterestReport, Trend, TrendMonth } from "@/lib/api";
 import { MONTHS_LONG, formatMoney } from "@/lib/format";
+import { cents, runningTotals } from "@/lib/money";
 
 const select = "rounded border border-slate-300 bg-surface px-2 py-1.5 text-sm";
 
 // Money arrives as exact decimal strings. Adding is done in whole cents so the totals are exact.
-const cents = (value: string) => Math.round(Number(value) * 100);
 const money = (c: number) => formatMoney((c / 100).toFixed(2));
 
 /** Net savings: income minus expenses, month by month, for all banks or one. Transfers between your
@@ -66,12 +66,10 @@ export function GrowthReport({
   const worst = active.reduce<TrendMonth | null>((a, m) => (a === null || cents(m.net) < cents(a.net) ? m : a), null);
   const biggest = Math.max(1, ...active.map((m) => Math.abs(cents(m.net))));
 
-  const rows = (trend?.months ?? []).reduce<{ m: TrendMonth; has: boolean; cumulative: number }[]>((acc, m) => {
-    const has = past(m) && (cents(m.income) !== 0 || cents(m.expense) !== 0);
-    const before = acc.length ? acc[acc.length - 1].cumulative : 0;
-    acc.push({ m, has, cumulative: has ? before + cents(m.net) : before });
-    return acc;
-  }, []);
+  const months = trend?.months ?? [];
+  const hasData = (m: TrendMonth) => past(m) && (cents(m.income) !== 0 || cents(m.expense) !== 0);
+  const totals = runningTotals(months, hasData, (m) => m.net);
+  const rows = months.map((m, i) => ({ m, has: hasData(m), cumulative: totals[i] }));
 
   const rateOf = (month: number) => interest?.months.find((r) => r.month === month);
   const interestTotal = (interest?.months ?? []).reduce((n, r) => n + cents(r.interest), 0);

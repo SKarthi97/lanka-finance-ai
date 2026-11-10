@@ -12,7 +12,7 @@ import io
 import json
 import re
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -212,7 +212,7 @@ def import_rows(
         page_count=None,
         is_encrypted=False,
         status="processing",
-        file_deleted_at=datetime.now(timezone.utc),
+        file_deleted_at=datetime.now(UTC),
     )
     db.add(document)
     db.flush()

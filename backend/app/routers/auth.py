@@ -102,7 +102,7 @@ def setup(
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, "Setup has already been completed")
+        raise HTTPException(status.HTTP_409_CONFLICT, "Setup has already been completed") from None
 
     _audit(db, user.id, "user.setup")
     session = _start_session(db, response, user, settings)

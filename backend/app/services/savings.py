@@ -17,20 +17,22 @@ from sqlalchemy.orm import Session
 from app.models import Bank, Category, Document, Transaction
 from app.services import interest
 from app.services.extraction import ACTIVE_STATUSES
+from app.tuning import (  # noqa: F401
+    DROP_BASELINE,
+    DROP_MIN_BEFORE,
+    DROP_POINTS,
+    IDLE_MIN_BALANCE,
+    IDLE_NO_INTEREST_DAYS,
+    IDLE_WINDOW_DAYS,
+    PROJECTION_MONTHS,
+    TRAILING_DAYS,
+    TREND_MONTHS,
+)
 
 INTEREST_CATEGORY = "Interest income"
 TAX_CATEGORY = "Tax"
 TAX_WORDS = ("INTEREST", "WHT", "WITHHELD", "AIT", "ADVANCE INCOME")
 
-TRAILING_DAYS = 365  # the window for "what a bank pays"
-DROP_POINTS = Decimal("0.50")  # percentage points: a fall at least this big is worth telling
-DROP_BASELINE = 3  # the latest credit is compared with the average of up to this many before it
-DROP_MIN_BEFORE = 2
-IDLE_NO_INTEREST_DAYS = 180
-IDLE_WINDOW_DAYS = 90
-IDLE_MIN_BALANCE = Decimal("25000")
-PROJECTION_MONTHS = 12
-TREND_MONTHS = 6
 
 
 @dataclass

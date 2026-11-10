@@ -93,7 +93,7 @@ def _breaks(documents: list[Document]) -> list[BalanceBreak]:
         key=lambda d: (d.period_end, d.id),
     )
     found: list[BalanceBreak] = []
-    for before, after in zip(ordered, ordered[1:]):
+    for before, after in zip(ordered, ordered[1:], strict=False):
         distance = after.period_start - before.period_end
         if abs(distance) > JOIN_TOLERANCE:
             continue  # a real gap or a large overlap: the month check and dedupe handle those

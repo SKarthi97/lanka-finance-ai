@@ -5,11 +5,10 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.config import Settings, get_settings
 from app.db import get_db
 from app.deps import get_current_session
-from app.models import UserSession
-from app.config import Settings, get_settings
-from app.models import StemEmbedding
+from app.models import StemEmbedding, UserSession
 from app.services import ai_activity, embeddings
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])

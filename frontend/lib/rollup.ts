@@ -1,9 +1,7 @@
-import { CategoryTotal } from "@/lib/api";
+import type { CategoryTotal } from "./api.ts";
+import { cents, fromCents as money } from "./money.ts";
 
 export type Grouped = CategoryTotal & { children: CategoryTotal[] };
-
-const cents = (value: string) => Math.round(Number(value) * 100);
-const money = (value: number) => (value / 100).toFixed(2);
 
 /**
  * Sub-categories are added into their parent: "Groceries" and "Dining out" count under

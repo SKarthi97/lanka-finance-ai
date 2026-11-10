@@ -19,6 +19,9 @@ jobs:
           cache-dependency-path: backend/requirements*.txt
       - run: pip install -r requirements-dev.txt
       - run: ruff check .
+      # Types: advisory until the first clean run (see docs/09-development.md)
+      - run: mypy app
+        continue-on-error: true
       - run: python -m pytest -q
 
   frontend:
@@ -36,6 +39,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
+      - run: npm run test:unit
       - run: npm run build
         env:
           BACKEND_URL: http://backend:8000

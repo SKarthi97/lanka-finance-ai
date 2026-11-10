@@ -91,7 +91,7 @@ def save_view(
         db.commit()
     except IntegrityError:  # two saves of one name at once
         db.rollback()
-        raise _error(409, "name_taken", "A view with that name already exists.")
+        raise _error(409, "name_taken", "A view with that name already exists.") from None
     db.refresh(view)
     return _out(view)
 

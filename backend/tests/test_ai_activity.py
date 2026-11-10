@@ -1,6 +1,6 @@
 """Progress and timing for the AI features. Durations only; never prompts or replies."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -81,7 +81,7 @@ def test_a_queued_then_running_job_reports_elapsed_time(loaded, session_factory,
     assert status["progress"]["running"] is False and status["progress"]["queued"] is True  # queued after upload
     assert status["ai_enabled"] is True and status["unnamed"] >= 1
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     with session_factory() as db:
         job = db.scalar(select(Job).where(Job.type == merchants.JOB_TYPE))
         job.status, job.locked_at = "running", now - timedelta(seconds=42)

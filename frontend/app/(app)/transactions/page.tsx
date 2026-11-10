@@ -13,6 +13,7 @@ import { loadPref, savePref } from "@/lib/prefs";
 import { api, ApiError, Bank, CategoryItem, NamingStatus, CorrectionResult, Tracker, TransactionItem, TransactionList, ViewFilters } from "@/lib/api";
 import { MONTHS_LONG, NO_ACCOUNT_HINT, bankTint, SOURCE_LABEL, formatAmount, formatDate, formatDuration, formatMoney } from "@/lib/format";
 import { SortKey, categoryTint, monthTitle, SortHeader, Chip } from "@/components/transactions/parts";
+import { FilterBar } from "@/components/transactions/FilterBar";
 
 const PAGE_SIZES = [25, 50, 100];
 
@@ -388,125 +389,25 @@ export default function TransactionsPage() {
 
       <AskFilters onApply={applyView} />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search descriptions"
-          aria-label="Search descriptions"
-          className="w-56 rounded border border-slate-300 px-3 py-2 text-sm"
-        />
-
-        <select
-          aria-label="Bank"
-          value={bank}
-          onChange={(e) => filter(setBank)(e.target.value)}
-          className={select}
-        >
-          <option value="">All banks</option>
-          {banks.map((b) => (
-            <option key={b.code} value={b.code}>
-              {b.name}
-            </option>
-          ))}
-        </select>
-
-        <select
-          aria-label="Category"
-          value={categoryFilter}
-          onChange={(e) => filter(setCategoryFilter)(e.target.value)}
-          className={select}
-        >
-          <option value="">All categories</option>
-          <option value="none">Uncategorised</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-
-        <select
-          aria-label="Year"
-          value={year}
-          onChange={(e) => {
-            filter(setYear)(e.target.value);
-            if (!e.target.value) setMonth("");
-          }}
-          className={select}
-        >
-          <option value="">All years</option>
-          {years.map((y) => (
-            <option key={y} value={y}>
-              {y}
-            </option>
-          ))}
-        </select>
-
-        <select
-          aria-label="Month"
-          value={month}
-          disabled={!year}
-          onChange={(e) => filter(setMonth)(e.target.value)}
-          className={`${select} disabled:opacity-50`}
-        >
-          <option value="">All months</option>
-          {MONTHS_LONG.map((name, index) => (
-            <option key={name} value={index + 1}>
-              {name}
-            </option>
-          ))}
-        </select>
-
-        <select
-          aria-label="Money in or out"
-          value={direction}
-          onChange={(e) => filter(setDirection)(e.target.value as "" | "in" | "out")}
-          className={select}
-        >
-          <option value="">Money in and out</option>
-          <option value="out">Money out</option>
-          <option value="in">Money in</option>
-        </select>
-
-        <input
-          inputMode="decimal"
-          value={minAmount}
-          onChange={(e) => filter(setMinAmount)(e.target.value.trim())}
-          placeholder="Min amount"
-          aria-label="Minimum amount"
-          className="w-28 rounded border border-slate-300 bg-surface px-2 py-2 text-sm"
-        />
-        <input
-          inputMode="decimal"
-          value={maxAmount}
-          onChange={(e) => filter(setMaxAmount)(e.target.value.trim())}
-          placeholder="Max amount"
-          aria-label="Maximum amount"
-          className="w-28 rounded border border-slate-300 bg-surface px-2 py-2 text-sm"
-        />
-
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={onlyFlagged}
-            onChange={(e) => filter(setOnlyFlagged)(e.target.checked)}
-          />
-          Only rows needing review
-        </label>
-
-        <label
-          className="flex items-center gap-2 text-sm"
-          title="A transaction that appears in two overlapping statements is counted once. Tick to see the repeated copies too."
-        >
-          <input
-            type="checkbox"
-            checked={showDuplicates}
-            onChange={(e) => filter(setShowDuplicates)(e.target.checked)}
-          />
-          Show duplicates
-        </label>
-      </div>
+      <FilterBar
+        values={{ search, bank, categoryFilter, year, month, direction, minAmount, maxAmount, onlyFlagged, showDuplicates }}
+        options={{ banks, categories, years }}
+        onSearch={setSearch}
+        onChange={{
+          bank: filter(setBank),
+          categoryFilter: filter(setCategoryFilter),
+          year: (value) => {
+            filter(setYear)(value);
+            if (!value) setMonth("");
+          },
+          month: filter(setMonth),
+          direction: filter(setDirection),
+          minAmount: filter(setMinAmount),
+          maxAmount: filter(setMaxAmount),
+          onlyFlagged: filter(setOnlyFlagged),
+          showDuplicates: filter(setShowDuplicates),
+        }}
+      />
 
       <SavedViews current={currentFilters} hasFilters={chips.length > 0} onApply={applyView} />
 

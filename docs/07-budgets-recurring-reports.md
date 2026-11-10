@@ -116,3 +116,25 @@ A sub-category (one level, see `04-categorization.md`) now counts toward its par
 with the figures, what to check (statements in review, uncategorised credits, possible tax, missing months),
 the month and bank tables and up to 300 of the transactions behind them. Built from the same report as the IRD
 tab, with the same "not tax advice" note.
+
+## Thresholds you can change (`backend/app/tuning.py`)
+
+Every number the reports and alerts use is named in one file with its default. To change one, add
+`TUNE_<NAME>=value` to the `.env` file and run `docker compose up -d` (a restart, no rebuild); a value that
+cannot be read stops the backend at start-up with its name. Examples:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `TUNE_BUDGET_NEAR` | 0.80 | share of a budget at which it reads "near" |
+| `TUNE_IDLE_MIN_BALANCE` | 25000 | average balance for an account to count as idle money |
+| `TUNE_IDLE_WINDOW_DAYS` / `TUNE_IDLE_NO_INTEREST_DAYS` | 90 / 180 | days averaged / days without interest |
+| `TUNE_DROP_POINTS` | 0.50 | fall in the rate (percentage points) worth an alert |
+| `TUNE_DROP_BASELINE`, `TUNE_DROP_MIN_BEFORE` | 3, 2 | earlier credits compared with / needed before judging |
+| `TUNE_TRAILING_DAYS`, `TUNE_TREND_MONTHS`, `TUNE_PROJECTION_MONTHS` | 365, 6, 12 | savings page windows |
+| `TUNE_TAX_WINDOW_DAYS` | 3 | days after a credit that withheld tax is looked for (interest rate) |
+| `TUNE_MIN_ASSUMED_DAYS`, `TUNE_MIN_SAME_MONTH_DAYS` | 25, 20 | data needed to rate a first interest credit |
+| `TUNE_NEAR_BEFORE_DAYS`, `TUNE_NEAR_AFTER_DAYS` | 1, 3 | where an IRD tax line may sit around its credit |
+| `TUNE_STALE_DAYS` | 45 | age of a statement before an account is "out of date" |
+| `TUNE_RECURRING_AMOUNT_TOLERANCE`, `TUNE_RECURRING_SHARE` | 0.20, 0.75 | what counts as a recurring payment |
+| `TUNE_TRANSFER_WINDOW_DAYS` | 3 | days apart for the two legs of a transfer |
+| `TUNE_FLAG_*` | see the file | when a transaction is flagged as unusual |

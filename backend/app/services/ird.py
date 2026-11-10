@@ -10,6 +10,8 @@ on a bank statement at all. Everything is exact decimal arithmetic on the figure
 import re
 from datetime import date
 
+from app.tuning import NEAR_AFTER_DAYS, NEAR_BEFORE_DAYS  # noqa: F401
+
 PERIOD_START_MONTH = 4  # April
 
 EMPLOYMENT = "employment"
@@ -37,8 +39,6 @@ _BY_CATEGORY = {
 # Banks word withheld tax in many ways ("AIT" is advance income tax, which replaced WHT on interest).
 TAX_WORDS = ("INTEREST", "WHT", "WITHHELD", "WITHHOLDING", "ADVANCE INCOME", "W/H", "WH TAX", "INT TAX")
 TAX_WORD_REGEXES = (r"\bAIT\b",)
-NEAR_BEFORE_DAYS = 1  # a tax line may sit a day before the credit it belongs to...
-NEAR_AFTER_DAYS = 3  # ...or up to this many days after it
 
 
 def assessment_year(today: date) -> int:

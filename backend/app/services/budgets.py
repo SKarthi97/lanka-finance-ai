@@ -14,10 +14,10 @@ from sqlalchemy.orm import Session
 
 from app.models import Budget, Category, Document, Transaction
 from app.services.extraction import ACTIVE_STATUSES
+from app.tuning import BUDGET_NEAR as NEAR
 
 ZERO = Decimal("0.00")
 CENTS = Decimal("0.01")
-NEAR = Decimal("0.80")  # at or above this share of the limit, the budget is "near"
 
 
 @dataclass

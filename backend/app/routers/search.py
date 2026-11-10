@@ -8,8 +8,8 @@ from app.config import Settings, get_settings
 from app.db import get_db
 from app.deps import get_current_session
 from app.models import UserSession
-from app.routers.views import ViewFilters
 from app.routers.transactions import Filters, _conditions
+from app.routers.views import ViewFilters
 from app.services import answers, search
 
 router = APIRouter(prefix="/api/search", tags=["search"])

@@ -21,10 +21,9 @@ from sqlalchemy.orm import Session
 from app.models import Category, Document, Transaction
 from app.services.categorizer import description_stem
 from app.services.extraction import ACTIVE_STATUSES
+from app.tuning import AMOUNT_TOLERANCE, SHARE  # noqa: F401
 
 ZERO = Decimal("0.00")
-AMOUNT_TOLERANCE = Decimal("0.20")  # an amount within 20% of the median counts as "the same"
-SHARE = 0.75  # this share of gaps / amounts must fit
 
 # name, centre in days, allowed distance from the centre, fewest occurrences
 CADENCES = (
@@ -117,7 +116,7 @@ def find(db: Session, user_id: int, today: date | None = None) -> list[Recurring
             continue
         items.sort(key=lambda i: i[0])
         dates = [i[0] for i in items]
-        gaps = [(b - a).days for a, b in zip(dates, dates[1:]) if (b - a).days > 0]
+        gaps = [(b - a).days for a, b in zip(dates, dates[1:], strict=False) if (b - a).days > 0]
         if not gaps:
             continue  # several rows on one day are one event, not a schedule
         cadence = _cadence(gaps, len(items))

@@ -33,11 +33,19 @@ from app.services import llm_guard, llm_json
 from app.services.categorizer import description_stem
 from app.services.extraction import ACTIVE_STATUSES
 from app.services.llm_classifier import LlmUnavailable
+from app.tuning import (  # noqa: F401
+    FLAG_LARGE_TIMES as LARGE_TIMES,
+)
+from app.tuning import (
+    FLAG_MIN_PAYMENTS_FOR_NEW_PAYEE as MIN_PAYMENTS_FOR_NEW_PAYEE,
+)
+from app.tuning import (
+    FLAG_MIN_PEERS as MIN_PEERS,
+)
+from app.tuning import (
+    FLAG_NEW_PAYEE_TIMES as NEW_PAYEE_TIMES,
+)
 
-MIN_PEERS = 5
-LARGE_TIMES = 3
-MIN_PAYMENTS_FOR_NEW_PAYEE = 30
-NEW_PAYEE_TIMES = 2
 MAX_EXPLANATION = 400
 
 TITLES = {

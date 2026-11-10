@@ -219,9 +219,10 @@ def test_tracker_is_empty_without_statements(logged_in):
 def test_reprocess_replaces_transactions_without_duplicating(
     logged_in, session_factory, test_settings
 ):
+    from sqlalchemy import select
+
     from app.models import Transaction
     from app.worker import process_one
-    from sqlalchemy import select
 
     client, csrf = logged_in
     doc_id = run_pipeline(client, csrf, session_factory, test_settings, boc_pdf(closing="999.00"))
@@ -367,7 +368,7 @@ def test_dashboard_previous_month_top_expenses_and_attention(
     assert Decimal(body["previous_month"]["expense"]) == Decimal("500.00")
 
     september_body = client.get("/api/dashboard?year=2022&month=9").json()
-    (top,) = [t for t in september_body["top_expenses"]]
+    (top,) = list(september_body["top_expenses"])
     assert top["bank_code"] == "boc"
     assert Decimal(top["amount"]) == Decimal("500.00")  # credits are never "expenses"
     assert body["uncategorised_total"] >= 0

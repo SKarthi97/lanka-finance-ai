@@ -385,7 +385,7 @@ class _State:
                 statement.issues.append(Issue("invalid_date"))
             years = years[1:]
 
-        for row, year in zip(self.rows, years):
+        for row, year in zip(self.rows, years, strict=False):
             try:
                 row_date = date(year, row.month, row.day)
             except ValueError:

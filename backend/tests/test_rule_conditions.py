@@ -13,7 +13,7 @@ D = Decimal
 
 
 def rule(**kw):
-    base = dict(id=1, pattern="ACME", pattern_type="contains", category_id=1, origin="user", priority=40)
+    base = {"id": 1, "pattern": "ACME", "pattern_type": "contains", "category_id": 1, "origin": "user", "priority": 40}
     return Rule(**{**base, **kw})
 
 
