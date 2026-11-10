@@ -215,7 +215,8 @@ Revised ordering: vertical slice first, then breadth. Each phase includes tests,
 
 ## 12. Implementation status
 
-Migrations 0001 to 0007 (`backend/alembic/versions`).
+Migrations 0001 to 0014 (`backend/alembic/versions`). The suite has about 480 backend tests on
+synthetic data; the frontend is checked with `tsc` and `next build` (no component tests yet).
 
 | Area | State | Where it is described |
 |---|---|---|
@@ -223,19 +224,20 @@ Migrations 0001 to 0007 (`backend/alembic/versions`).
 | Auth: Argon2id, cookie sessions, CSRF, rate limit, change password, audit log | Done | `05-user-interface.md` |
 | Upload, sha256 duplicate check, password flow, retention, Postgres job queue | Done | `02-upload-and-queue.md` |
 | BOC extraction, validation, reconciliation, statement totals, duplicates across statements | Done | `03-extraction.md` |
+| HNB, Commercial Bank and Sampath adapters (each written from one or two real layouts; multi-page and unusual rows unverified) | Done, need real-statement checks | `03-extraction.md` |
+| Checks across statements: own-account transfers, missing months, balance breaks, notification bell | Done | `03-extraction.md`, `05-user-interface.md` |
 | Dashboard, trends, tracker, drill-down, transactions explorer, CSV export | Done | `03-extraction.md`, `05-user-interface.md` |
 | Categories, rules, learning from corrections, review queue, bulk edit | Done | `04-categorization.md` |
-| Local AI categorisation: name-based replies, confidence tiers, hunches, examples, eval tool | Done | `04-categorization.md` |
-| Ollama health and hardware screen | Done | System page |
-| HNB adapter (savings statements; written from one real layout, multi-page unverified) | Done, needs real-statement checks | `03-extraction.md` |
-| Commercial Bank adapter (written from one quiet-account layout; ordinary debits/credits and multi-page unverified) | Done, needs real-statement checks | `03-extraction.md` |
-| Sampath Bank adapter (savings statement; written from one real layout, multi-page unverified) | Done, needs real-statement checks | `03-extraction.md` |
-| Commercial, Sampath adapters; generic adapter; LLM extraction fallback; OCR | Not started | |
+| Local AI: categorisation, merchant names, search in plain words, month in words, flag explanations, progress and activity log | Done (model `qwen3:4b`, thinking off) | `04-categorization.md`, `08-ai-features.md` |
+| Similarity hints from your own corrections (embeddings) | Built, off by default; measure it first | `08-ai-features.md` |
+| Budgets, recurring payments, saved views, monthly report | Done | `07-budgets-recurring-reports.md` |
+| Net savings, interest credited and the rate from the days money was kept | Done | `07-budgets-recurring-reports.md` |
+| IRD (Sri Lanka) figures by year of assessment | Done; figures not yet checked against real certificates | `07-budgets-recurring-reports.md` |
 | Backup and restore scripts, manual categories kept on re-extract, per-bank duplicate matching | Done (scripts untested on the real install until run) | `06-backup-and-restore.md` |
-| Offline compose override, GPU override, healthchecks for worker and frontend | Not started | |
-| Backup and restore scripts, encrypted archives | Not started | |
-| Internal transfer matching, recurring detection, merchants | Not started (`transfers` kind exists on categories only) | |
-| Assistant (function calling) and reports (Excel, PDF) | Not started | |
+| Ollama health and hardware screen, AI activity log | Done | System page |
+| Generic adapter; LLM extraction fallback; OCR; other banks | Not started | |
+| Offline compose override, GPU override, healthchecks for the worker and frontend | Not started | |
+| Assistant (function calling), Excel export | Not started | |
 
 ### Where the code differs from the design above
 
@@ -245,14 +247,18 @@ Migrations 0001 to 0007 (`backend/alembic/versions`).
 - **Source-page viewer:** server-rendered PNGs (PyMuPDF), not pdf.js, and only while the
   original file is kept.
 - **Adapter interface:** `identify` + `parse` only.
-- **Default model:** `qwen2.5:1.5b` is the compose default, but the evaluation in
-  `04-categorization.md` shows `qwen2.5:3b` is the smallest model that categorises reliably.
+- **Default model:** the compose default is still small, but the measured choice is
+  `qwen3:4b` with `OLLAMA_THINK` off (`04-categorization.md`); set it in `.env`.
 - **AI output:** the model returns a category *name* from a closed list (schema `enum`), not an
   id, and its confidence is not trusted on its own.
 - **Transactions columns:** `category_id` and `suggested_category_id` (migration 0007) replace
   `primary_category_id` / `subcategory_id`; `classification_source` is
   `rule | user_rule | manual | llm | llm_unsure`.
-- **Not created yet:** `merchants`, `transfer_groups`, `recurring_groups`.
+- **Tables that differ from section 4:** merchant names live in `merchant_names`
+  (stem to name, source rule/ai/manual), not `merchants`. Own-account transfers and recurring
+  payments are not stored as groups: transfers are found on demand and filed as the Transfers
+  category (rejections in `transfer_rejections`), and recurring payments are detected from the
+  rows each time. Added tables: `budgets`, `saved_views`, `stem_embeddings`.
 - **Frontend dependencies:** no charting library; charts are hand-drawn SVG.
 - **Env vars:** `LLM_*` settings control the AI pass (see `04-categorization.md`). The worker
   reads its Ollama timeout from `LLM_TIMEOUT_S`, the backend from `OLLAMA_TIMEOUT_S`.

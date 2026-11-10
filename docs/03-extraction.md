@@ -310,6 +310,8 @@ categories in 0007).
 | `DELETE /api/documents/{id}` | delete a statement and its rows |
 | `GET /api/documents` | list statements with status |
 | `GET /api/tracker?year=` | bank/account x month grid of uploaded statements, plus `gap_months`, `gap_total` and `breaks` per row |
+| `GET /api/savings/interest?year=&bank_code=` | interest credited per month and the annual rate it works out to (`07-budgets-recurring-reports.md`) |
+| `GET /api/reports/ird?year=` (and `/ird.csv`) | income by head and tax withheld for a year of assessment starting 1 April |
 | `GET /api/transfers/suggestions` | possible transfers between your own accounts |
 | `POST /api/transfers/confirm`, `/reject` | `{out_id, in_id}`: file both halves as Transfers, or remember it is not a transfer |
 | `POST /api/documents/{id}/accept` | accept a `needs_review` statement |

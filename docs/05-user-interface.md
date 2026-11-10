@@ -10,9 +10,12 @@ talks only to the Next.js server, which proxies `/api` to the backend on the int
 | Dashboard (`/`) | Balances, month and year figures, trends, spending by category, attention panel |
 | Upload (`/upload`) | Upload a statement (with password if encrypted), status of each document |
 | Transactions (`/transactions`) | Explorer with filters, sorting, paging, export, bulk edit and detail panel |
-| Categories (`/categories`) | Categories, rules, Review queue, AI suggestions |
+| Categories (`/categories`) | Review queue, AI suggestions, Transfers, categories, rules |
+| Budgets (`/budgets`) | Monthly limits per expense category, with progress |
+| Recurring (`/recurring`) | Payments and income that repeat on a schedule |
+| Reports (`/reports`) | Tabs: Monthly report, Growth (net savings and interest), IRD (Sri Lanka) |
 | Statement (`/documents/{id}`) | One statement: status, checks, issues, rows, source pages |
-| System (`/system`) | Local AI status and hardware |
+| System (`/system`) | Local AI status, hardware, and a collapsible AI activity card |
 | Settings (`/settings`) | Account, password, remembered choices, Local AI status |
 
 The sidebar shows badges (statements needing review, uncategorised rows) and a status icon per
@@ -66,10 +69,26 @@ never be mistaken for a different period. The statement tracker follows the bank
 Charts have hover tooltips (keyboard focusable), hidden data tables for screen readers, and
 `aria-hidden` drawings.
 
+## Upload
+
+A drop zone (drag a PDF in, or choose a file; anything that is not a PDF is refused), bank
+selection (automatic by default), a password field that appears only for protected PDFs, and the
+list of statements with bank label, pages, size, upload date and status. Failed rows are tinted
+red and rows needing review amber; a summary line counts statements in progress, needing review
+and failed.
+
 ## Transactions
 
-- Filters: bank, year, month, category, uncategorised, flagged, duplicates, free-text search.
-  Sorting by date, amount, description, bank or category.
+- Filters: bank, year, month, category, uncategorised, flagged, duplicates, free-text search,
+  minimum and maximum amount, direction (in or out). **Ask in plain words** turns a sentence into
+  these filters (`08-ai-features.md`); **Saved views** keep a set of filters (`07`).
+- Sorting by date, amount, description, bank or category. Above the table a strip shows money in,
+  money out and net for the whole filter (not only the page). The table scrolls in its own box
+  with a sticky heading; when sorted by date, a header row marks each month.
+- Reading aids: debits red with a minus and credits green with a plus, the category box tinted by
+  its kind (income green, transfer blue, uncategorised amber), a left edge on credit and flagged
+  rows, the bank as a coloured label, the merchant name as the bold first line with the original
+  text under it (**Improve names** runs the AI naming pass).
 - Columns drop on narrow screens; the row opens a **detail panel** (full description,
   statement, page, validation status, category source and confidence, AI hunch).
 - Changing a category is **ask first**: the page calls
@@ -89,6 +108,13 @@ Charts have hover tooltips (keyboard focusable), hidden data tables for screen r
 - AI suggestions tab: what the model applied, with **Accept confident** for those at or above
   the "confident" threshold. See `04-categorization.md`.
 
+## Reports page
+
+Three tabs, described in `07-budgets-recurring-reports.md`: **Monthly report** (with a month
+stepper, print and CSV), **Growth (net savings)** (income minus expenses per month, with the
+interest credited and its rate) and **IRD (Sri Lanka)** (income by head for 1 April to 31 March).
+Print hides the menu, top bar and controls.
+
 ## Remembered choices
 
 Stored in the browser only (`localStorage`, wrapped in try/catch so a blocked store just means
@@ -98,7 +124,9 @@ here goes to the server.
 
 ## Styling
 
-Dark sidebar theme. Tailwind's slate scale is remapped in `tailwind.config.ts` for contrast
+Shared helpers in `lib/format.ts`: `bankTint` (a fixed colour per bank code, used for bank labels
+everywhere) and `kindChip` (the look of a category kind). Summary cards share a coloured top edge
+(green good, red bad, accent neutral). Dark sidebar theme. Tailwind's slate scale is remapped in `tailwind.config.ts` for contrast
 (`slate-400` and `slate-500` were lightened for readable secondary text). Loading, empty and
 error states share `components/states.tsx`; dialogs share `components/ConfirmDialog.tsx`.
 

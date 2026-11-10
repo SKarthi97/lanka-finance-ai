@@ -68,8 +68,10 @@ The page `/reports` (menu: Reports) has three tabs.
   x 365, the days running from the previous interest credit.
 * **IRD (Sri Lanka)**: income by head for a year of assessment (1 April to 31 March, "2025/26"),
   `GET /api/reports/ird?year=2025` and `/api/reports/ird.csv`. Salary, interest, dividends and other
-  income come from the categories; tax lines are split into tax on interest, on dividends, and
-  other. It lists missing statement months per account, statements waiting for review and
+  income come from the categories; tax lines (category Tax) are split into tax on interest, on
+  dividends, and other, by their wording (WHT, AIT, withheld, ...) and, when the wording says
+  nothing, by sitting within three days of an interest or dividend credit on the same account.
+  Uncategorised debits in that position are flagged as likely tax, not counted. It lists missing statement months per account, statements waiting for review and
   uncategorised credits, because each makes the figures incomplete. It sorts what the statements show;
   it does not compute tax (rates and reliefs change, and employer-deducted tax and interest credited
   after tax are not on a statement), and the page says so.

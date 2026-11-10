@@ -145,8 +145,19 @@ qwen2.5:3b` and rebuild the backend image after changing the script.
 `services/categorizer.py` (`CATEGORIES`, `RULES`). They hold generic wording only (ATM, SLIPS
 IN, LOAN RECO, INTEREST, SERVICE CHARGE, CEFT, ...) and nothing personal. They are created per
 user the first time they are needed; adding entries and raising `SYSTEM_VERSION` adds them for
-existing users on the next run without touching your own rules. You can turn a built-in rule
-off but not delete it.
+existing users on the next run without touching your own rules. When the version changes the
+rules are also re-run once on the rows you already have (manual choices and AI suggestions are
+left alone), so a new rule is not just for future statements. You can turn a built-in rule off but
+not delete it.
+
+Income categories: Salary, Interest income, **Dividend**, Deposits, Other income. Tax rules cover
+the ways banks word tax on interest: "INTEREST WITHHELD", "WHT", "AIT" (advance income tax, as a
+whole word), "ADVANCE INCOME TAX", "TAX ON INTEREST", "INTEREST TAX", "WITHHOLDING TAX", plus
+"STAMP DUTY". The version is 3 at the time of writing.
+
+A correction rule is saved under the description's stem (words without digits), so it also matches
+a description with a number between the words ("CRDLESDEP 0000769618638 AECT" matches the stem
+"CRDLESDEP AECT").
 
 ## API
 
@@ -172,11 +183,12 @@ Migration 0006 adds `categories`, `classification_rules`, `classification_feedba
 `transactions` category columns (`category_id`, `classification_source`,
 `classification_confidence`, `classification_explanation`). Migration 0007 adds
 `transactions.suggested_category_id` (the AI hunch). Sources: `rule`, `user_rule`, `manual`,
-`llm`, `llm_unsure`.
+`llm`, `llm_unsure`. Later migrations add `transfer_rejections` (0011), `budgets` and `saved_views`
+(0012), `merchant_names` (0013) and `stem_embeddings` (0014).
 
 ## Limits
 
-- No sub-categories or merchants yet (the schema allows `parent_id`; merchants come later).
+- No sub-categories (the schema allows `parent_id`). Merchant names exist as a display layer (`08-ai-features.md`) but rules still match descriptions, not merchants.
 - Rules match descriptions only. They cannot use amounts or direction.
 - A transaction in an overlapping statement shares its original's category.
 - Category names are unique per user; renaming is not available yet (add a new one and move

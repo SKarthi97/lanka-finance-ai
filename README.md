@@ -5,8 +5,9 @@ that it reconciles, then explore, categorise and chart your money. Nothing leave
 the optional AI is a local model (Ollama) and the app never calls an external service.
 
 Status: Bank of Ceylon (BOC), Hatton National Bank (HNB), Commercial Bank and Sampath Bank
-statements work end to end (all but BOC are checked against one or two layouts so far). Other banks, backups, reports and the chat assistant are
-planned (see `docs/00-architecture.md`, section 12).
+statements work end to end (all but BOC are checked against one or two layouts so far). Other
+banks, scanned statements (OCR), a generic adapter and a chat assistant are not built yet (see
+`docs/00-architecture.md`, section 12).
 
 ## What it does
 
@@ -18,8 +19,14 @@ planned (see `docs/00-architecture.md`, section 12).
   spending by category, and a tracker showing which months have a statement.
 - Categorise with built-in rules, your own rules and rules learned from your corrections; an
   optional local model handles the rest and only suggests, with a clear confidence tier.
-- Transactions explorer with filters, sorting, CSV export, bulk category change and a detail
-  panel.
+- Transactions explorer with filters, sorting, CSV export, bulk category change, saved views,
+  merchant names, search in plain words, a totals strip and a detail panel.
+- Check across statements: own-account transfers, missing months, balance breaks between
+  statements, notification bell.
+- Budgets, recurring payments and flags on unusual rows.
+- Reports: a monthly report (print or CSV), net savings by month with the interest each account
+  paid and its rate, and figures for a Sri Lankan tax return by year of assessment (IRD tab).
+- Backup and restore scripts (`scripts/`).
 
 ## Run it (Windows 11 + Docker Desktop)
 
@@ -60,7 +67,7 @@ codes and counts, never descriptions or amounts.
 | `docs/04-categorization.md` | Rules, learning, the local AI, tiers, model evaluation |
 | `docs/05-user-interface.md` | Pages, account settings, dialogs, remembered choices, accessibility |
 | `docs/06-backup-and-restore.md` | Backup and restore scripts, scheduling, encryption, what survives re-extraction |
-| `docs/07-budgets-recurring-reports.md` | Budgets, recurring payments, saved filters, the monthly report |
-| `docs/08-ai-features.md` | Merchant names, search in plain words, and the embedding analysis |
+| `docs/07-budgets-recurring-reports.md` | Budgets, recurring payments, saved filters, and the Reports page (monthly, growth and interest, IRD) |
+| `docs/08-ai-features.md` | Merchant names, search in plain words, progress and AI activity, similarity hints, month in words, flag explanations |
 | `docs/windows-setup.md` | Windows, WSL2 and Docker setup |
 | `docs/licenses.md` | Third-party and model licences |
