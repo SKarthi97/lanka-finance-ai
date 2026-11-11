@@ -26,10 +26,10 @@ HEADERS = lambda csrf: {"X-CSRF-Token": csrf}  # noqa: E731
 def default_rules() -> tuple[list[Rule], dict[int, str]]:
     ids = {name: index + 1 for index, (name, _) in enumerate(CATEGORIES)}
     rules = [
-        Rule(index + 1, pattern.upper(), ptype, ids[name], "system", priority)
-        for index, (pattern, ptype, name, priority) in enumerate(RULES)
+        Rule(index + 1, pattern.upper(), ptype, ids[name], "system", priority, direction=direction)
+        for index, (pattern, ptype, name, priority, direction) in enumerate(RULES)
     ]
-    rules.sort(key=lambda r: (-r.priority, -len(r.pattern), r.id))
+    rules.sort(key=lambda r: (-r.priority, -len(r.pattern), -r.conditions, r.id))
     return rules, {v: k for k, v in ids.items()}
 
 
@@ -42,10 +42,7 @@ def default_rules() -> tuple[list[Rule], dict[int, str]]:
         ("ATMCASHWDLSYNTHETIC TOWN BR.", "Cash withdrawal"),  # no spaces, as printed
         ("WD ATM SAV ICBS", "Cash withdrawal"),
         ("LOAN RECO 12345678", "Loan repayment"),
-        ("SLIPS IN - NOV2022", "Deposits"),
-        ("DEP TO SAV ICBS", "Transfers"),
-        ("BOOKED SAVINGS W/D", "Transfers"),
-        ("CEFT TO SOMEONE", "Transfers"),
+        ("SLIPS IN - NOV2022", "Deposits"),  # direction unknown: the plain deposit rule
         ("SALARY JAN", "Salary"),
         ("POS PURCHASE SYNTHETIC SHOP", "Card payment"),
         ("CEB BILL PAYMENT", "Utilities"),
@@ -56,6 +53,34 @@ def default_rules() -> tuple[list[Rule], dict[int, str]]:
 def test_built_in_rules(description, expected):
     rules, names = default_rules()
     rule = pick_rule(rules, normalise(description))
+    assert rule is not None and names[rule.category_id] == expected
+
+
+@pytest.mark.parametrize(
+    "description, direction, expected",
+    [
+        ("BOOKED SAVINGS W/D", "in", "Cash withdrawal"),
+        ("BOOKED SAVINGS W/D", "out", "Cash withdrawal"),
+        ("BOOKED SAVINGS DEP", "in", "Credit Transfers"),
+        ("BOOKED SAVINGS DEP", "out", "Debit Transfers"),
+        ("DEP TO SAV ICBS", "out", "Debit Transfers"),
+        ("CEFT TO SOMEONE", "out", "Debit Transfers"),
+        ("CEFT FROM SOMEONE", "in", "Credit Transfers"),
+        ("CEFT_1_123456_7890123", "in", "Credit Transfers"),  # joined with underscores
+        ("CEFT1234567 JOHN", "out", "Debit Transfers"),  # joined with digits
+        ("INWARD CEFT-REF 77", "in", "Credit Transfers"),
+        ("FUND TRANSFER TO OWN ACCOUNT", "out", "Debit Transfers"),
+        ("SLIPS OUT - 1234", "out", "Debit Transfers"),
+        ("SLIPS IN - MAY2022", "in", "Salary"),  # month and year: a salary
+        ("SLIPS IN-NOV 2022", "in", "Salary"),
+        ("SLIPS IN - MAR22", "in", "Salary"),
+        ("SLIPS IN - 12345", "in", "Deposits"),  # any other SLIPS IN is a deposit
+        ("SLIPS IN", "in", "Deposits"),
+    ],
+)
+def test_transfers_and_slips_by_direction(description, direction, expected):
+    rules, names = default_rules()
+    rule = pick_rule(rules, normalise(description), Decimal("100"), direction)
     assert rule is not None and names[rule.category_id] == expected
 
 
@@ -88,7 +113,7 @@ def test_normalise_and_stem():
 STATEMENT_ROWS = [
     ("02/09", "SALARY CREDIT SYNTHETIC", "2,500.00", "3,500.00"),
     ("03/09", "ATM CASH WITHDRAWAL", "500.00", "3,000.00"),
-    ("04/09", "BOOKED SAVINGS W/D", "1,000.00", "4,000.00"),  # transfer in
+    ("04/09", "BOOKED SAVINGS DEP", "1,000.00", "4,000.00"),  # transfer in
     ("05/09", "DEP TO SAV ICBS", "700.00", "3,300.00"),  # transfer out
     ("06/09", "MYSTERY MERCHANT 111", "100.00", "3,200.00"),
     ("07/09", "MYSTERY MERCHANT 222", "50.00", "3,150.00"),
@@ -128,7 +153,7 @@ def test_new_statements_are_categorised_on_extraction(logged_in, session_factory
     assert salary["classification_source"] == "rule"
     assert salary["classification_explanation"] == "Rule: contains 'SALARY'"
     assert rows["ATM CASH WITHDRAWAL"]["category_name"] == "Cash withdrawal"
-    assert rows["BOOKED SAVINGS W/D"]["category_kind"] == "transfer"
+    assert rows["BOOKED SAVINGS DEP"]["category_kind"] == "transfer"
 
     mystery = rows["MYSTERY MERCHANT 111"]
     assert mystery["category_id"] is None
@@ -167,7 +192,8 @@ def test_dashboard_breaks_spending_down_by_category(logged_in, session_factory, 
     assert Decimal(breakdown["Salary"]["income"]) == Decimal("2500.00")
     assert breakdown["Uncategorised"]["category_id"] is None
     assert breakdown["Uncategorised"]["transactions"] == 3
-    assert breakdown["Transfers"]["kind"] == "transfer"
+    assert breakdown["Credit Transfers"]["kind"] == "transfer"
+    assert breakdown["Debit Transfers"]["kind"] == "transfer"
 
 
 def test_explorer_filters_by_category(logged_in, session_factory, test_settings):

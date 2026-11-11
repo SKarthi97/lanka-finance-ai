@@ -30,7 +30,7 @@ from app.models import (
     Transaction,
 )
 
-SYSTEM_VERSION = 3  # bump when CATEGORIES / RULES below gain entries
+SYSTEM_VERSION = 4  # bump when CATEGORIES / RULES below gain entries
 
 KINDS = ("income", "expense", "transfer")
 
@@ -42,7 +42,9 @@ CATEGORIES: list[tuple[str, str]] = [
     ("Dividend", "income"),
     ("Deposits", "income"),
     ("Other income", "income"),
-    ("Transfers", "transfer"),
+    ("Transfers", "transfer"),  # your own accounts, filed when you confirm a pair
+    ("Credit Transfers", "transfer"),  # money arriving by transfer (CEFT in, savings withdrawal ...)
+    ("Debit Transfers", "transfer"),  # money leaving by transfer (CEFT out, deposit to savings ...)
     ("Cash withdrawal", "expense"),
     ("Bank charges", "expense"),
     ("Tax", "expense"),
@@ -61,8 +63,22 @@ CATEGORIES: list[tuple[str, str]] = [
     ("Other expense", "expense"),
 ]
 
-# (pattern, type, category, priority). Generic bank wording only: nothing personal.
-RULES: list[tuple[str, str, str, int]] = [
+_MONTHS = "JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC"
+
+
+def _by_direction(pattern: str, kind: str, priority: int) -> list[tuple[str, str, str, int, str | None]]:
+    """The same words, filed by direction: a credit is a Credit Transfer, a debit a Debit Transfer."""
+    return [
+        (pattern, kind, "Credit Transfers", priority, "in"),
+        (pattern, kind, "Debit Transfers", priority, "out"),
+    ]
+
+
+# (pattern, type, category, priority, direction). Generic bank wording only: nothing personal.
+# direction is "in" (a credit), "out" (a debit) or None (either). type is contains, word or regex
+# (a regular expression, written without backslashes because patterns are upper-cased).
+RULES: list[tuple[str, str, str, int, str | None]] = [
+    (p, t, c, pr, None) for p, t, c, pr in [
     # taxes and charges first: they contain words that would otherwise look like income
     ("INTEREST WITHHELD", "contains", "Tax", 30),
     ("STAMP DUTY", "contains", "Tax", 30),
@@ -80,15 +96,6 @@ RULES: list[tuple[str, str, str, int]] = [
     ("MAINTENANCE FEE", "contains", "Bank charges", 20),
     ("CARD FEE", "contains", "Bank charges", 20),
     ("BANK CHARGE", "contains", "Bank charges", 20),
-    # money moving between your own accounts
-    ("DEP TO SAV", "contains", "Transfers", 25),
-    ("BOOKED SAVINGS", "contains", "Transfers", 25),
-    ("FUND TRANSFER", "contains", "Transfers", 15),
-    ("ONLINE TRANSFER", "contains", "Transfers", 15),
-    ("TRANSFER TO", "contains", "Transfers", 15),
-    ("TRANSFER FROM", "contains", "Transfers", 15),
-    ("CEFT", "word", "Transfers", 15),
-    ("SLIPS OUT", "contains", "Transfers", 15),
     # cash and loans
     ("ATMCASHWDL", "contains", "Cash withdrawal", 20),
     ("ATM CASH WDL", "contains", "Cash withdrawal", 20),
@@ -130,6 +137,21 @@ RULES: list[tuple[str, str, str, int]] = [
     ("HOSPITAL", "contains", "Healthcare", 10),
     ("RESTAURANT", "contains", "Food and dining", 10),
     ("SUPERMARKET", "contains", "Shopping", 10),
+    ]
+] + [
+    # Transfers, filed by direction. CEFT also appears joined to other characters (CEFT_1_...,
+    # CEFT1234), so it is matched anywhere in the text, not as a whole word.
+    *_by_direction("DEP TO SAV", "contains", 25),
+    ("BOOKED SAVINGS W/D", "contains", "Cash withdrawal", 26, None),  # a withdrawal from savings
+    *_by_direction("BOOKED SAVINGS", "contains", 25),  # other booked-savings movements
+    *_by_direction("FUND TRANSFER", "contains", 15),
+    *_by_direction("ONLINE TRANSFER", "contains", 15),
+    *_by_direction("CEFT", "contains", 15),
+    ("TRANSFER TO", "contains", "Debit Transfers", 15, "out"),
+    ("TRANSFER FROM", "contains", "Credit Transfers", 15, "in"),
+    ("SLIPS OUT", "contains", "Debit Transfers", 15, "out"),
+    # "SLIPS IN - MAY2022" (a month and year) is a salary; any other SLIPS IN is a deposit (rule above).
+    (f"SLIPS IN[ -]*({_MONTHS})[A-Z]*[ -]*[0-9]{{2,4}}", "regex", "Salary", 15, "in"),
 ]
 
 # Rows whose category came from rules (or nowhere) are re-evaluated when rules change.
@@ -217,6 +239,14 @@ def _word_regex(pattern: str) -> re.Pattern:
     return re.compile(rf"(?<![A-Z0-9]){re.escape(pattern)}(?![A-Z0-9])")
 
 
+@lru_cache(maxsize=256)
+def _compiled(pattern: str) -> re.Pattern | None:
+    try:
+        return re.compile(pattern.upper())
+    except re.error:
+        return None  # a bad pattern matches nothing rather than breaking categorisation
+
+
 def rule_matches(rule: Rule, normalised: str, amount: Decimal | None = None, direction: str | None = None) -> bool:
     # A rule with conditions only applies to a row whose amount and direction are known and fit.
     if rule.direction is not None and direction != rule.direction:
@@ -227,6 +257,9 @@ def rule_matches(rule: Rule, normalised: str, amount: Decimal | None = None, dir
         return False
     if rule.pattern_type == "word":
         return _word_regex(rule.pattern.upper()).search(normalised) is not None
+    if rule.pattern_type == "regex":
+        compiled = _compiled(rule.pattern)
+        return compiled is not None and compiled.search(normalised) is not None
     return rule.pattern.upper() in normalised
 
 
@@ -290,18 +323,20 @@ def ensure_defaults(db: Session, user_id: int) -> None:
             db.flush()
 
             known = {
-                (r.pattern_type, r.pattern.upper())
+                (r.pattern_type, r.pattern.upper(), r.direction or "")
                 for r in db.scalars(
                     select(ClassificationRule).where(ClassificationRule.user_id == user_id)
                 )
             }
-            for pattern, pattern_type, category_name, priority in RULES:
-                if (pattern_type, pattern) not in known:
+            for pattern, pattern_type, category_name, priority, direction in RULES:
+                if (pattern_type, pattern, direction or "") not in known:
                     db.add(
                         ClassificationRule(
                             user_id=user_id,
                             pattern=pattern,
                             pattern_type=pattern_type,
+                            direction=direction,
+                            conditions_key=f"{direction or ''}||",
                             category_id=existing[category_name].id,
                             origin="system",
                             priority=priority,

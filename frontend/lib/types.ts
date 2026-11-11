@@ -243,7 +243,7 @@ export type CategoryItem = {
 export type RuleItem = {
   id: number;
   pattern: string;
-  pattern_type: "contains" | "word";
+  pattern_type: "contains" | "word" | "regex";
   category_id: number;
   category_name: string;
   origin: "system" | "user" | "correction";

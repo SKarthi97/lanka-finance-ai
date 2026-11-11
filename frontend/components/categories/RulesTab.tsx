@@ -114,6 +114,7 @@ export function RulesTab({ rules, categories, run }: { rules: RuleItem[]; catego
                 <td className="px-3 py-2">
                   {r.pattern}
                   {r.pattern_type === "word" && <span className="ml-2 text-xs text-slate-400">whole word</span>}
+                  {r.pattern_type === "regex" && <span className="ml-2 text-xs text-slate-400">pattern</span>}
                   {(r.direction || r.min_amount || r.max_amount) && (
                     <div className="text-xs text-slate-500">
                       only {r.direction === "in" ? "credits" : r.direction === "out" ? "debits" : "amounts"}

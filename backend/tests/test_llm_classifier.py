@@ -241,7 +241,9 @@ def test_text_in_a_description_cannot_make_the_model_create_categories(
     # a hostile model reply that tries to use an unknown id is simply not accepted
     reply = {"results": [{"index": 0, "category_id": 424242, "confidence": 1.0}]}
     assert classify(session_factory, test_settings, fake_ollama([reply], []))["applied"] == 0
-    assert len(client.get("/api/categories").json()) == 22  # no category was created
+    from app.services.categorizer import CATEGORIES
+
+    assert len(client.get("/api/categories").json()) == len(CATEGORIES)  # no category was created
 
 
 # --- when the model is not there ----------------------------------------------------------------------

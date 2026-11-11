@@ -321,7 +321,7 @@ def test_dividend_is_an_income_category_with_rules():
     from app.services.categorizer import CATEGORIES, RULES
 
     assert ("Dividend", "income") in CATEGORIES
-    assert any(cat == "Dividend" for _p, _t, cat, _pr in RULES)
+    assert any(cat == "Dividend" for _p, _t, cat, _pr, _d in RULES)
 
 
 # --- sub-categories roll up into their parent ----------------------------------------------

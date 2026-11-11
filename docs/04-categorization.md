@@ -163,6 +163,23 @@ rules are also re-run once on the rows you already have (manual choices and AI s
 left alone), so a new rule is not just for future statements. You can turn a built-in rule off but
 not delete it.
 
+### Credit and debit transfers, CEFT, and SLIPS IN
+
+* **Credit Transfers / Debit Transfers** are built-in categories (kind `transfer`, so they stay out of income
+  and expense, like Transfers). The same wording is filed by direction: money in is a Credit Transfer, money out
+  a Debit Transfer. This covers CEFT, FUND TRANSFER, ONLINE TRANSFER, BOOKED SAVINGS (other than W/D), DEP TO SAV, TRANSFER TO (out), TRANSFER FROM (in) and SLIPS OUT (out).
+  "Transfers" remains the category used when you confirm an own-account pair.
+* **BOOKED SAVINGS W/D** (a withdrawal from savings) is a **Cash withdrawal**, whichever way it is booked.
+* **CEFT is matched anywhere in the text**, so `CEFT_1_xxxx_xxxxxxx` and `CEFT1234` count, not only the word on
+  its own.
+* **SLIPS IN**: a credit with a month and year (`SLIPS IN - MAY2022`, `SLIPS IN-NOV 2022`, `SLIPS IN - MAR22`) is
+  filed as **Salary**; any other SLIPS IN is a **Deposit**. The month rule is a built-in `regex` rule (shown as
+  "pattern" on the Rules tab); user-written rules are still `contains` or `whole word`.
+* Rules can carry a direction, so one wording can mean different things in and out. Existing users get these on
+  the next start (`SYSTEM_VERSION` 4) and their rows are re-run; the old undirected CEFT / transfer rules stay but
+  the directional ones take precedence. If a month-labelled SLIPS IN is not a salary for you, turn that rule off
+  on the Rules tab.
+
 Income categories: Salary, Interest income, **Dividend**, Deposits, Other income. Tax rules cover
 the ways banks word tax on interest: "INTEREST WITHHELD", "WHT", "AIT" (advance income tax, as a
 whole word), "ADVANCE INCOME TAX", "TAX ON INTEREST", "INTEREST TAX", "WITHHOLDING TAX", plus
