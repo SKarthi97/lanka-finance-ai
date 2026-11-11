@@ -7,6 +7,12 @@
 
 services:
   ollama:
+    # Small cards (2-4 GB): a smaller context and a compressed KV cache leave room for more model
+    # layers on the GPU. Override any of these in .env; check the split with `ollama ps`.
+    environment:
+      OLLAMA_CONTEXT_LENGTH: ${OLLAMA_CONTEXT_LENGTH:-2048}
+      OLLAMA_FLASH_ATTENTION: ${OLLAMA_FLASH_ATTENTION:-1}
+      OLLAMA_KV_CACHE_TYPE: ${OLLAMA_KV_CACHE_TYPE:-q8_0}
     deploy:
       resources:
         reservations:
@@ -14,3 +20,14 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+
+  # The System page's Hardware panel runs nvidia-smi inside the backend container, so it needs
+  # to see the card too (it only reads the GPU name; inference still happens in ollama).
+  backend:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, utility]

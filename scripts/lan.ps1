@@ -28,6 +28,9 @@
   Adds a Windows Firewall rule that allows the port from your local network only, on Private networks
   only. Needs an administrator PowerShell.
 
+.PARAMETER Gpu
+  Also applies docker-compose.gpu.yml (NVIDIA GPU for ollama, and for the backend's Hardware panel).
+
 .PARAMETER Down
   Stops the proxy (the app itself keeps running on this computer) and removes the firewall rule if present.
 #>
@@ -36,6 +39,7 @@ param(
   [string]$Name,
   [int]$Port = 8443,
   [switch]$OpenFirewall,
+  [switch]$Gpu,
   [switch]$Down
 )
 
@@ -44,6 +48,7 @@ $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 $ruleName = "Lanka Finance AI (LAN HTTPS)"
 $files = @("-f", "docker-compose.yml", "-f", "docker-compose.lan.yml")
+if ($Gpu) { $files += @("-f", "docker-compose.gpu.yml") }
 
 if ($Down) {
   $env:LAN_HOST = "x"; $env:LAN_NAME = "y"
